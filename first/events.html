@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Your LooLoop recommendations</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -24,20 +28,37 @@
           Discover newcomer-friendly events selected around your interests and
           circumstances.
         </p>
-        <form id="search-form">
-          <label>
-            What are you into?
+        <form id="search-form" class="event-search-form">
+          <label class="search-field">
+            <span class="search-field-icon" aria-hidden="true">✦</span>
+            <span class="search-field-copy">
+              <span class="search-field-label">What are you into?</span>
+            </span>
             <input
               id="keyword"
               name="keyword"
               placeholder="e.g. live music, technology"
             />
           </label>
-          <label>
-            Where?
-            <input id="city" name="city" value="Waterloo" required />
+          <label class="search-field">
+            <span class="search-field-icon location-icon" aria-hidden="true"
+              >⌖</span
+            >
+            <span class="search-field-copy">
+              <span class="search-field-label">Event city</span>
+            </span>
+            <input
+              id="city"
+              name="city"
+              value="Waterloo"
+              placeholder="e.g. Toronto"
+              required
+            />
           </label>
-          <button>Find events →</button>
+          <button type="submit">
+            <span>Find events</span>
+            <span class="button-arrow" aria-hidden="true">→</span>
+          </button>
         </form>
         <div class="quick">
           Try:
@@ -59,6 +80,24 @@
           </div>
           <p id="status">Preparing your recommendations…</p>
         </div>
+        <div id="map-panel" class="map-panel" hidden>
+          <div class="map-heading">
+            <div>
+              <p class="eyebrow">EVENTS NEAR YOU</p>
+              <p>Your location, search radius, and event venues.</p>
+            </div>
+            <p class="map-legend">
+              <span class="legend-dot legend-origin"></span> You
+              <span class="legend-dot legend-event"></span> Events
+            </p>
+          </div>
+          <div
+            id="event-map"
+            class="event-map"
+            role="region"
+            aria-label="Map of your location and event venues"
+          ></div>
+        </div>
         <div id="results" class="grid">
           <p class="empty">Looking for events that fit you…</p>
         </div>
@@ -75,6 +114,7 @@
           <p class="date"></p>
           <h3></h3>
           <p class="venue"></p>
+          <p class="distance"></p>
           <p class="source"></p>
           <ul class="match-reasons"></ul>
           <div class="event-actions">
@@ -88,6 +128,7 @@
       </article>
     </template>
 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="first.js"></script>
   </body>
 </html>

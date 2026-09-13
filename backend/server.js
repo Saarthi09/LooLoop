@@ -117,6 +117,127 @@ function fitsAvailability(event, availability) {
   return true;
 }
 
+function distanceBetweenKm(first, second) {
+  const earthRadiusKm = 6371;
+  const toRadians = (degrees) => (degrees * Math.PI) / 180;
+  const latitudeDifference = toRadians(second.latitude - first.latitude);
+  const longitudeDifference = toRadians(second.longitude - first.longitude);
+  const value =
+    Math.sin(latitudeDifference / 2) ** 2 +
+    Math.cos(toRadians(first.latitude)) *
+      Math.cos(toRadians(second.latitude)) *
+      Math.sin(longitudeDifference / 2) ** 2;
+
+  return 2 * earthRadiusKm * Math.asin(Math.sqrt(value));
+}
+
+function getEventCoordinates(event) {
+  const location = event._embedded?.venues?.[0]?.location;
+  const latitude = Number(location?.latitude);
+  const longitude = Number(location?.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  return { latitude, longitude };
+}
+
+async function resolveOrigin(preferences) {
+  const hasCoordinates =
+    preferences.latitude !== null &&
+    preferences.latitude !== "" &&
+    preferences.longitude !== null &&
+    preferences.longitude !== "";
+  const latitude = Number(preferences.latitude);
+  const longitude = Number(preferences.longitude);
+  if (
+    hasCoordinates &&
+    Number.isFinite(latitude) &&
+    Number.isFinite(longitude)
+  ) {
+    return { latitude, longitude };
+  }
+
+  const place = String(
+    preferences.manualLocation || preferences.city || "",
+  ).trim();
+  if (!place) return null;
+
+  const postalCode = place.match(
+    /\b[ABCEGHJ-NPRSTVXY]\d[ABCEGHJ-NPRSTV-Z][ -]?\d[ABCEGHJ-NPRSTV-Z]\d\b/i,
+  );
+  if (postalCode) {
+    const postalArea = postalCode[0].replace(/\s+/g, "").slice(0, 3);
+    try {
+      const response = await fetch(
+        `https://api.zippopotam.us/CA/${postalArea}`,
+      );
+      if (response.ok) {
+        const match = await response.json();
+        const postalPlace = match.places?.[0];
+        const postalLatitude = Number(postalPlace?.latitude);
+        const postalLongitude = Number(postalPlace?.longitude);
+        if (
+          Number.isFinite(postalLatitude) &&
+          Number.isFinite(postalLongitude)
+        ) {
+          return {
+            latitude: postalLatitude,
+            longitude: postalLongitude,
+          };
+        }
+      }
+    } catch {}
+  }
+
+  const url = new URL("https://nominatim.openstreetmap.org/search");
+  url.searchParams.set("format", "json");
+  url.searchParams.set("limit", "1");
+  url.searchParams.set("countrycodes", "ca");
+  url.searchParams.set("q", place);
+
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: "application/json", "User-Agent": "LooLoop/1.0" },
+    });
+    if (response.ok) {
+      const matches = await response.json();
+      if (matches.length) {
+        return {
+          latitude: Number(matches[0].lat),
+          longitude: Number(matches[0].lon),
+        };
+      }
+    }
+  } catch {}
+
+  const canadianUrl = new URL("https://geocoder.ca/");
+  canadianUrl.searchParams.set("locate", place);
+  canadianUrl.searchParams.set("json", "1");
+  try {
+    const response = await fetch(canadianUrl, {
+      headers: { Accept: "application/json", "User-Agent": "LooLoop/1.0" },
+    });
+    if (!response.ok) return null;
+    const match = await response.json();
+    const matchedLatitude = Number(match.latt);
+    const matchedLongitude = Number(match.longt);
+    if (!Number.isFinite(matchedLatitude) || !Number.isFinite(matchedLongitude)) {
+      return null;
+    }
+    return { latitude: matchedLatitude, longitude: matchedLongitude };
+  } catch {
+    return null;
+  }
+}
+
+function addDistance(event, origin) {
+  if (!origin) return event;
+  const coordinates = getEventCoordinates(event);
+  if (!coordinates) return { ...event, distanceKm: null };
+  return {
+    ...event,
+    distanceKm: Number(distanceBetweenKm(origin, coordinates).toFixed(1)),
+  };
+}
+
 function fallbackRecommendations(events, preferences) {
   const interests = (preferences.interests || []).map((item) =>
     item.toLowerCase(),
@@ -152,6 +273,9 @@ function fallbackRecommendations(events, preferences) {
         score += 15;
         reasons.push("Fits your usual availability");
       }
+      if (event.distanceKm != null) {
+        reasons.push(`${event.distanceKm} km from the selected location`);
+      }
 
       return {
         event,
@@ -180,6 +304,7 @@ function normalizeWaterlooEvent(event) {
         {
           name: event.locationName || event.host || "University of Waterloo",
           city: { name: "Waterloo" },
+          location: { latitude: "43.4723", longitude: "-80.5449" },
         },
       ],
     },
@@ -559,8 +684,35 @@ app.get("/api/uwaterloo-events", async (req, res) => {
 app.get("/api/discover", async (req, res) => {
   const size = getSize(req.query.size);
   const city = String(req.query.city || "").trim();
+  const requestedRadius = Math.min(
+    Math.max(Number(req.query.radius) || 5, 1),
+    100,
+  );
+  let origin = null;
+  if (req.query.originLatitude && req.query.originLongitude) {
+    const latitude = Number(req.query.originLatitude);
+    const longitude = Number(req.query.originLongitude);
+    if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+      origin = { latitude, longitude };
+    }
+  }
+  if (!origin && req.query.originPlace) {
+    origin = await resolveOrigin({ manualLocation: req.query.originPlace });
+  }
+  if (!origin && city) {
+    origin = await resolveOrigin({ manualLocation: city });
+  }
+
   const includeWaterloo = !city || /waterloo|kitchener/i.test(city);
-  const requests = [getTicketmasterEvents(req, size)];
+  const eventQuery = { ...req.query };
+  delete eventQuery.originLatitude;
+  delete eventQuery.originLongitude;
+  delete eventQuery.originPlace;
+  delete eventQuery.radius;
+  delete eventQuery.unit;
+  delete eventQuery.latlong;
+  const eventRequest = { query: eventQuery };
+  const requests = [getTicketmasterEvents(eventRequest, size)];
 
   if (includeWaterloo && uWaterlooKey) {
     requests.push(
@@ -575,6 +727,7 @@ app.get("/api/discover", async (req, res) => {
   const events = providers
     .filter((result) => result.status === "fulfilled")
     .flatMap((result) => result.value)
+    .map((event) => addDistance(event, origin))
     .sort(
       (a, b) =>
         new Date(a.dates?.start?.dateTime || a.dates?.start?.localDate) -
@@ -591,7 +744,12 @@ app.get("/api/discover", async (req, res) => {
       .json({ error: "Could not reach an event provider." });
   }
 
-  return res.json({ events });
+  return res.json({
+    events,
+    locationResolved: Boolean(origin),
+    radiusKm: origin ? requestedRadius : null,
+    origin,
+  });
 });
 
 app.post("/api/recommend", async (req, res) => {
@@ -602,14 +760,25 @@ app.post("/api/recommend", async (req, res) => {
   const city = String(preferences.city || "Waterloo").trim();
   const campus = String(preferences.campus || "").trim();
   const keyword = interests[0] || "";
-  const eventRequest = {
-    query: {
-      city,
-      keyword,
-    },
-  };
 
   try {
+    const origin = await resolveOrigin(preferences);
+    const maxDistance = Math.min(
+      Math.max(Number(preferences.maxDistance) || 5, 1),
+      100,
+    );
+    const eventRequest = {
+      query: {
+        keyword,
+        ...(origin
+          ? {
+              latlong: `${origin.latitude},${origin.longitude}`,
+              radius: String(maxDistance),
+              unit: "km",
+            }
+          : { city }),
+      },
+    };
     const providerRequests = [getTicketmasterEvents(eventRequest, 20)];
     if (uWaterlooKey && /waterloo/i.test(`${city} ${campus}`)) {
       providerRequests.push(getWaterlooEvents({ size: 20 }));
@@ -622,6 +791,12 @@ app.post("/api/recommend", async (req, res) => {
       .filter(
         (event, index, allEvents) =>
           allEvents.findIndex((item) => item.id === event.id) === index,
+      )
+      .map((event) => addDistance(event, origin))
+      .filter(
+        (event) =>
+          !origin ||
+          (event.distanceKm != null && event.distanceKm <= maxDistance),
       );
 
     if (!events.length) {
@@ -637,6 +812,7 @@ app.post("/api/recommend", async (req, res) => {
         summary: "Recommendations based on your newcomer preferences.",
         recommendations: fallback,
         mode: "rules",
+        origin,
       });
     }
 
@@ -661,6 +837,7 @@ app.post("/api/recommend", async (req, res) => {
         summary: aiResult.summary,
         recommendations: recommendations.length ? recommendations : fallback,
         mode: recommendations.length ? "gemini" : "rules",
+        origin,
       });
     } catch (error) {
       console.error("Gemini recommendation failed:", error.message);
@@ -668,6 +845,7 @@ app.post("/api/recommend", async (req, res) => {
         summary: "Recommendations based on your newcomer preferences.",
         recommendations: fallback,
         mode: "rules",
+        origin,
       });
     }
   } catch (error) {

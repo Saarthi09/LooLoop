@@ -8,6 +8,11 @@ locationMethod.addEventListener("change", () => {
   const useAutomaticLocation = locationMethod.value === "automatic";
   automaticLocation.hidden = !useAutomaticLocation;
   manualLocation.hidden = useAutomaticLocation;
+  if (!useAutomaticLocation) {
+    questionnaire.elements.latitude.value = "";
+    questionnaire.elements.longitude.value = "";
+    locationStatus.textContent = "Location will be found from your entry.";
+  }
 });
 
 document.querySelector("#use-location").addEventListener("click", () => {
@@ -19,8 +24,8 @@ document.querySelector("#use-location").addEventListener("click", () => {
   locationStatus.textContent = "Finding your approximate location…";
   navigator.geolocation.getCurrentPosition(
     ({ coords }) => {
-      questionnaire.elements.latitude.value = coords.latitude.toFixed(2);
-      questionnaire.elements.longitude.value = coords.longitude.toFixed(2);
+      questionnaire.elements.latitude.value = coords.latitude.toFixed(5);
+      questionnaire.elements.longitude.value = coords.longitude.toFixed(5);
       locationStatus.textContent = "Approximate location added.";
     },
     () => {

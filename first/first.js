@@ -4,11 +4,17 @@ const status = document.querySelector("#status");
 const title = document.querySelector("#result-title");
 const template = document.querySelector("#event-template");
 const universityButton = document.querySelector("#university-events");
+const mapPanel = document.querySelector("#map-panel");
+const eventMapElement = document.querySelector("#event-map");
 // Live Server uses port 5500; Express serves the API on port 3000.
 const apiBase = ["5500", "5501"].includes(window.location.port)
   ? "http://localhost:3000"
   : "";
 const joinedEventIds = new Set();
+let distanceOriginLabel = "your location";
+let activeOrigin = null;
+let eventMap = null;
+let mapLayer = null;
 
 function formatDate(event) {
   const value = event.dates?.start?.dateTime || event.dates?.start?.localDate;
@@ -51,6 +57,106 @@ async function loadJoinedEventIds() {
 }
 
 const joinedCirclesReady = loadJoinedEventIds();
+
+function getEventLocation(event) {
+  const location = event._embedded?.venues?.[0]?.location;
+  const latitude = Number(location?.latitude);
+  const longitude = Number(location?.longitude);
+
+  return Number.isFinite(latitude) && Number.isFinite(longitude)
+    ? [latitude, longitude]
+    : null;
+}
+
+function createEventPopup(event) {
+  const popup = document.createElement("div");
+  const heading = document.createElement("strong");
+  const venue = document.createElement("p");
+  const link = document.createElement("a");
+  const eventVenue = event._embedded?.venues?.[0];
+
+  heading.textContent = event.name || "Untitled event";
+  venue.textContent =
+    [eventVenue?.name, eventVenue?.city?.name].filter(Boolean).join(" · ") ||
+    "Location TBA";
+  link.href = event.url || "#";
+  link.target = "_blank";
+  link.rel = "noreferrer";
+  link.textContent = "View details ↗";
+
+  popup.append(heading, venue, link);
+  return popup;
+}
+
+function renderMap(items) {
+  const events = items.map((item) => item.event || item);
+  const mappedEvents = events
+    .map((event) => ({ event, location: getEventLocation(event) }))
+    .filter((item) => item.location);
+
+  mapPanel.hidden = !mappedEvents.length && !activeOrigin;
+  if (mapPanel.hidden || typeof L === "undefined") return;
+
+  if (!eventMap) {
+    eventMap = L.map(eventMapElement, { scrollWheelZoom: false });
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19,
+    }).addTo(eventMap);
+  }
+
+  if (mapLayer) {
+    mapLayer.remove();
+  }
+  mapLayer = L.layerGroup().addTo(eventMap);
+
+  const bounds = [];
+  if (activeOrigin) {
+    const originCoordinates = [activeOrigin.latitude, activeOrigin.longitude];
+    const maximumDistance = Number(savedPreferences?.maxDistance) || 5;
+
+    L.circle(originCoordinates, {
+      radius: maximumDistance * 1000,
+      color: "#18233f",
+      fillColor: "#6c63ff",
+      fillOpacity: 0.08,
+      weight: 2,
+    }).addTo(mapLayer);
+
+    L.circleMarker(originCoordinates, {
+      radius: 9,
+      color: "#ffffff",
+      fillColor: "#18233f",
+      fillOpacity: 1,
+      weight: 3,
+    })
+      .bindPopup(`<strong>You</strong><br>${distanceOriginLabel}`)
+      .addTo(mapLayer);
+    bounds.push(originCoordinates);
+  }
+
+  mappedEvents.forEach(({ event, location }) => {
+    L.circleMarker(location, {
+      radius: 8,
+      color: "#ffffff",
+      fillColor: "#6c63ff",
+      fillOpacity: 1,
+      weight: 3,
+    })
+      .bindPopup(createEventPopup(event))
+      .addTo(mapLayer);
+    bounds.push(location);
+  });
+
+  window.setTimeout(() => {
+    eventMap.invalidateSize();
+    if (bounds.length === 1) {
+      eventMap.setView(bounds[0], 13);
+    } else {
+      eventMap.fitBounds(bounds, { padding: [35, 35], maxZoom: 14 });
+    }
+  }, 0);
+}
 
 async function joinCircle(event, button, message) {
   const session = getSession();
@@ -99,6 +205,7 @@ async function joinCircle(event, button, message) {
 }
 
 function render(items) {
+  renderMap(items);
   results.replaceChildren();
   if (!items.length) {
     results.innerHTML =
@@ -119,6 +226,10 @@ function render(items) {
     card.querySelector(".venue").textContent =
       [venue?.name, venue?.city?.name].filter(Boolean).join(" · ") ||
       "Location TBA";
+    card.querySelector(".distance").textContent =
+      event.distanceKm != null
+        ? `${event.distanceKm} km from ${distanceOriginLabel}`
+        : "";
     card.querySelector(".source").textContent = event.source || "Ticketmaster";
     const matchBadge = card.querySelector(".match-badge");
     const reasons = card.querySelector(".match-reasons");
@@ -163,6 +274,11 @@ async function loadRecommendations(preferences) {
       throw new Error(payload.error || "Could not build recommendations.");
     }
 
+    activeOrigin = payload.origin || null;
+    distanceOriginLabel =
+      preferences.locationMethod === "automatic"
+        ? "your location"
+        : "your entered location";
     await joinedCirclesReady;
     render(payload.recommendations);
     title.textContent = "Your newcomer picks";
@@ -176,18 +292,39 @@ async function loadRecommendations(preferences) {
 }
 async function search() {
   const data = new FormData(form);
-  const params = new URLSearchParams({
-    city: data.get("city"),
-    keyword: data.get("keyword"),
-    size: "12",
-  });
   results.innerHTML = '<p class="empty">Looking for your next loop…</p>';
   status.textContent = "Searching…";
   try {
+    const params = new URLSearchParams({
+      city: data.get("city"),
+      keyword: data.get("keyword"),
+      size: "12",
+      radius: String(savedPreferences?.maxDistance || 5),
+      unit: "km",
+    });
+    const hasSavedCoordinates =
+      savedPreferences?.latitude != null &&
+      savedPreferences?.longitude != null;
+    if (hasSavedCoordinates) {
+      params.set("originLatitude", savedPreferences.latitude);
+      params.set("originLongitude", savedPreferences.longitude);
+      distanceOriginLabel = "your location";
+    } else {
+      const enteredOrigin =
+        savedPreferences?.manualLocation || savedPreferences?.city;
+      params.set("originPlace", enteredOrigin || data.get("city"));
+      distanceOriginLabel = enteredOrigin
+        ? "your entered location"
+        : data.get("city");
+    }
     const response = await fetch(`${apiBase}/api/discover?${params}`);
     const payload = await response.json();
     if (!response.ok)
       throw new Error(payload.error || "Could not find events.");
+    if (!payload.locationResolved) {
+      throw new Error("That location could not be found. Try a city or postal code.");
+    }
+    activeOrigin = payload.origin || null;
     await joinedCirclesReady;
     render(payload.events);
     title.textContent = `Happening in ${data.get("city")}`;
@@ -211,6 +348,15 @@ async function showUniversityEvents() {
       throw new Error(payload.error || "Could not find university events.");
     }
 
+    if (
+      savedPreferences?.latitude != null &&
+      savedPreferences?.longitude != null
+    ) {
+      activeOrigin = {
+        latitude: Number(savedPreferences.latitude),
+        longitude: Number(savedPreferences.longitude),
+      };
+    }
     await joinedCirclesReady;
     render(payload.events);
     title.textContent = "University of Waterloo events";

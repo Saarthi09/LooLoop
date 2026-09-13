@@ -32,6 +32,7 @@ export async function rankEventsWithGemini({ apiKey, preferences, events }) {
     venue: event._embedded?.venues?.[0]?.name,
     city: event._embedded?.venues?.[0]?.city?.name,
     priceMinimum: event.priceRanges?.[0]?.min ?? null,
+    distanceKm: event.distanceKm ?? null,
     categories: event.classifications
       ?.map((item) => item.segment?.name)
       .filter(Boolean),
