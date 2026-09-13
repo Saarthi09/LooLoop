@@ -1,9 +1,9 @@
 import {
   loadEvents, SEED_USER, estimateTravel, distanceKm, geocode, suggestPlaces, similarity, fetchForecast, SAMPLE_FORECAST,
   INTERESTS, CIRCUMSTANCES, BUDGETS, RANGES, MODES, ART_PALETTES, QUICK_PLACES, TODAY, WANTED_DATE, isCalendarDate
-} from "./data.js?v=28";
-import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js?v=28";
-import { session, api, profileUrl, webUrl, ANSWERS_KEY, clearAnswers } from "./api.js?v=28";
+} from "./data.js?v=29";
+import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js?v=29";
+import { session, api, profileUrl, webUrl, ANSWERS_KEY, clearAnswers } from "./api.js?v=29";
 
 /* Single state object. Every handler mutates state, then calls render(). */
 const state = {
@@ -1722,6 +1722,12 @@ function mountCards(html) {
     return;
   }
 
+  /* whatever inside the card had keyboard focus keeps it after the swap;
+     the card's markup order is stable, so the same index is the same control */
+  const focusables = () => [...keptCard.querySelectorAll("a, button, input, select, textarea, [tabindex]")];
+  const active = document.activeElement;
+  const focusAt = active && active !== keptCard && keptCard.contains(active) ? focusables().indexOf(active) : -1;
+
   /* the selected card: attributes, art and body parts, but not the map */
   for (const { name, value } of newCard.attributes) keptCard.setAttribute(name, value);
   const oldArt = keptCard.querySelector(".card-art");
@@ -1734,6 +1740,10 @@ function mountCards(html) {
   const oldLinks = keptMap.querySelector(".card-map-links");
   const newLinks = newMap.querySelector(".card-map-links");
   if (oldLinks && newLinks) oldLinks.replaceWith(newLinks);
+  if (focusAt >= 0) {
+    const again = focusables()[focusAt];
+    if (again) again.focus({ preventScroll: true });
+  }
 
   /* everything else, rebuilt around it */
   const nodes = [...tpl.content.childNodes];
@@ -2064,9 +2074,14 @@ setInterval(() => {
   if (state.status !== "ready" || state.screen !== "results") return;
   if (!state.nowAuto && !state.clockFallback) return;   /* a scrubbed clock stays put */
   if (!isToday()) return;                               /* another day: nothing moves */
-  /* Past midnight the page is still built for yesterday; the pin must not
-     carry yesterday's finished listings into today as catchable. */
-  if (state.clockPinned && localDay() !== TODAY) state.clockPinned = false;
+  /* The page is built for one day: the listings, the sample set, the
+     forecast and the clock all assume TODAY. When the real day moves on,
+     patching around a stale day only produces contradictions, so the page
+     is rebuilt once for the new day; the answers are remembered. */
+  if (localDay() !== TODAY) {
+    window.location.reload();
+    return;
+  }
   pickClock();
   const minute = Math.floor(nowHour() * 60);
   if (minute === lastTickMinute) return;                /* same minute, same ranking */
