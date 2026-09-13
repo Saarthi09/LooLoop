@@ -84,6 +84,7 @@ const RAW_EVENTS = [
     travelMinutes: 6, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "outdoor",
     tags: ["outdoors", "sports", "wellness"],
     circumstances: ["free", "solo-friendly", "beginner-welcome", "drop-in"],
     goingCount: 24, matchScore: 0.74,
@@ -99,6 +100,7 @@ const RAW_EVENTS = [
     travelMinutes: 20, travelMode: "transit",
     price: 4, currency: "CAD", costTier: "cheap",
     scope: "kw",
+    setting: "indoor",
     tags: ["sports", "wellness"],
     circumstances: ["student-price", "solo-friendly", "no-alcohol", "step-free"],
     goingCount: 11, matchScore: 0.42,
@@ -114,6 +116,7 @@ const RAW_EVENTS = [
     travelMinutes: 9, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["food", "social"],
     circumstances: ["free", "free-food", "drop-in", "solo-friendly", "step-free"],
     goingCount: 210, matchScore: 0.93,
@@ -129,6 +132,7 @@ const RAW_EVENTS = [
     travelMinutes: 29, travelMode: "transit",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "mixed",
     tags: ["food", "social", "outdoors"],
     circumstances: ["free", "solo-friendly", "step-free"],
     goingCount: 140, matchScore: 0.83,
@@ -144,6 +148,7 @@ const RAW_EVENTS = [
     travelMinutes: 10, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["sports", "wellness"],
     circumstances: ["free", "drop-in", "beginner-welcome", "solo-friendly", "no-alcohol"],
     goingCount: 30, matchScore: 0.75,
@@ -159,6 +164,7 @@ const RAW_EVENTS = [
     travelMinutes: 8, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["tech", "academic"],
     circumstances: ["free", "beginner-welcome", "no-alcohol", "quiet", "drop-in"],
     goingCount: 45, matchScore: 0.77,
@@ -174,6 +180,7 @@ const RAW_EVENTS = [
     travelMinutes: 21, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "kw",
+    setting: "outdoor",
     tags: ["outdoors", "sports", "wellness"],
     circumstances: ["free", "solo-friendly", "beginner-welcome"],
     goingCount: 62, matchScore: 0.8,
@@ -189,6 +196,7 @@ const RAW_EVENTS = [
     travelMinutes: 9, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["social", "academic"],
     circumstances: ["free", "solo-friendly", "drop-in", "step-free", "free-food"],
     goingCount: 900, matchScore: 0.93,
@@ -204,6 +212,7 @@ const RAW_EVENTS = [
     travelMinutes: 36, travelMode: "transit",
     price: 0, currency: "CAD", costTier: "free",
     scope: "kw",
+    setting: "indoor",
     tags: ["arts", "social"],
     circumstances: ["free", "solo-friendly", "step-free", "quiet"],
     goingCount: 70, matchScore: 0.72,
@@ -219,6 +228,7 @@ const RAW_EVENTS = [
     travelMinutes: 22, travelMode: "transit",
     price: 0, currency: "CAD", costTier: "free",
     scope: "kw",
+    setting: "outdoor",
     tags: ["outdoors", "wellness"],
     circumstances: ["free", "solo-friendly", "beginner-welcome", "quiet"],
     goingCount: 18, matchScore: 0.73,
@@ -234,6 +244,7 @@ const RAW_EVENTS = [
     travelMinutes: 9, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["career", "academic"],
     circumstances: ["free", "beginner-welcome", "no-alcohol", "drop-in", "step-free"],
     goingCount: 64, matchScore: 0.81,
@@ -249,6 +260,7 @@ const RAW_EVENTS = [
     travelMinutes: 19, travelMode: "transit",
     price: 0, currency: "CAD", costTier: "free",
     scope: "kw",
+    setting: "outdoor",
     tags: ["food", "social", "outdoors"],
     circumstances: ["free", "solo-friendly", "step-free", "drop-in"],
     goingCount: 220, matchScore: 0.93,
@@ -264,6 +276,7 @@ const RAW_EVENTS = [
     travelMinutes: 9, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["food", "social"],
     circumstances: ["free", "free-food", "solo-friendly", "beginner-welcome", "step-free"],
     goingCount: 160, matchScore: 0.95,
@@ -279,6 +292,7 @@ const RAW_EVENTS = [
     travelMinutes: 10, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["tech", "academic", "research"],
     circumstances: ["free", "beginner-welcome", "quiet", "no-alcohol", "step-free"],
     goingCount: 120, matchScore: 0.9,
@@ -294,6 +308,7 @@ const RAW_EVENTS = [
     travelMinutes: 32, travelMode: "transit",
     price: 0, currency: "CAD", costTier: "free",
     scope: "kw",
+    setting: "indoor",
     tags: ["tech", "ai-ml", "career"],
     circumstances: ["free", "free-food", "beginner-welcome", "solo-friendly", "step-free"],
     goingCount: 95, matchScore: 0.86,
@@ -309,6 +324,7 @@ const RAW_EVENTS = [
     travelMinutes: 9, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["games", "social"],
     circumstances: ["free", "drop-in", "solo-friendly", "beginner-welcome", "no-alcohol"],
     goingCount: 26, matchScore: 0.74,
@@ -324,6 +340,7 @@ const RAW_EVENTS = [
     travelMinutes: 6, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["ai-ml", "tech", "research", "academic"],
     circumstances: ["free", "quiet", "no-alcohol", "solo-friendly"],
     goingCount: 38, matchScore: 0.66,
@@ -339,6 +356,7 @@ const RAW_EVENTS = [
     travelMinutes: 19, travelMode: "transit",
     price: 25, currency: "CAD", costTier: "pricey",
     scope: "kw",
+    setting: "indoor",
     tags: ["arts"],
     circumstances: ["student-price", "beginner-welcome", "no-alcohol", "solo-friendly", "step-free"],
     goingCount: 14, matchScore: 0.52,
@@ -354,6 +372,7 @@ const RAW_EVENTS = [
     travelMinutes: 8, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "outdoor",
     tags: ["sports", "outdoors"],
     circumstances: ["free", "drop-in", "beginner-welcome", "solo-friendly"],
     goingCount: 34, matchScore: 0.76,
@@ -369,6 +388,7 @@ const RAW_EVENTS = [
     travelMinutes: 34, travelMode: "transit",
     price: 0, currency: "CAD", costTier: "free",
     scope: "kw",
+    setting: "outdoor",
     tags: ["sports", "outdoors"],
     circumstances: ["free", "beginner-welcome", "solo-friendly", "drop-in"],
     goingCount: 28, matchScore: 0.75,
@@ -384,6 +404,7 @@ const RAW_EVENTS = [
     travelMinutes: 5, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["startups", "career", "tech"],
     circumstances: ["free", "beginner-welcome", "no-alcohol", "step-free"],
     goingCount: 40, matchScore: 0.77,
@@ -399,6 +420,7 @@ const RAW_EVENTS = [
     travelMinutes: 13, travelMode: "bike",
     price: 8, currency: "CAD", costTier: "cheap",
     scope: "campus",
+    setting: "outdoor",
     tags: ["outdoors", "sports"],
     circumstances: ["student-price", "beginner-welcome", "no-alcohol", "solo-friendly"],
     goingCount: 16, matchScore: 0.53,
@@ -414,6 +436,7 @@ const RAW_EVENTS = [
     travelMinutes: 12, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["wellness"],
     circumstances: ["free", "drop-in", "quiet", "no-alcohol", "solo-friendly", "step-free"],
     goingCount: 22, matchScore: 0.64,
@@ -429,6 +452,7 @@ const RAW_EVENTS = [
     travelMinutes: 9, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["games", "social"],
     circumstances: ["free", "drop-in", "solo-friendly", "beginner-welcome", "step-free"],
     goingCount: 48, matchScore: 0.78,
@@ -444,6 +468,7 @@ const RAW_EVENTS = [
     travelMinutes: 19, travelMode: "transit",
     price: 9, currency: "CAD", costTier: "cheap",
     scope: "kw",
+    setting: "indoor",
     tags: ["arts", "social"],
     circumstances: ["student-price", "solo-friendly", "quiet", "step-free"],
     goingCount: 55, matchScore: 0.49,
@@ -459,6 +484,7 @@ const RAW_EVENTS = [
     travelMinutes: 12, travelMode: "walk",
     price: 5, currency: "CAD", costTier: "cheap",
     scope: "campus",
+    setting: "indoor",
     tags: ["sports", "wellness"],
     circumstances: ["student-price", "beginner-welcome", "solo-friendly", "no-alcohol"],
     goingCount: 31, matchScore: 0.55,
@@ -474,6 +500,7 @@ const RAW_EVENTS = [
     travelMinutes: 11, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["food", "wellness", "academic"],
     circumstances: ["free", "free-food", "beginner-welcome", "no-alcohol", "solo-friendly"],
     goingCount: 36, matchScore: 0.76,
@@ -489,6 +516,7 @@ const RAW_EVENTS = [
     travelMinutes: 35, travelMode: "transit",
     price: 0, currency: "CAD", costTier: "free",
     scope: "kw",
+    setting: "outdoor",
     tags: ["outdoors", "social", "wellness"],
     circumstances: ["free", "solo-friendly", "drop-in", "no-alcohol"],
     goingCount: 12, matchScore: 0.62,
@@ -504,6 +532,7 @@ const RAW_EVENTS = [
     travelMinutes: 9, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "outdoor",
     tags: ["outdoors", "tech"],
     circumstances: ["free", "drop-in", "beginner-welcome", "solo-friendly", "no-alcohol"],
     goingCount: 27, matchScore: 0.74,
@@ -519,6 +548,7 @@ const RAW_EVENTS = [
     travelMinutes: 36, travelMode: "transit",
     price: 0, currency: "CAD", costTier: "free",
     scope: "kw",
+    setting: "outdoor",
     tags: ["social", "arts"],
     circumstances: ["free", "solo-friendly", "step-free", "no-alcohol"],
     goingCount: 88, matchScore: 0.75,
@@ -534,6 +564,7 @@ const RAW_EVENTS = [
     travelMinutes: 35, travelMode: "transit",
     price: 0, currency: "CAD", costTier: "free",
     scope: "kw",
+    setting: "outdoor",
     tags: ["food", "social", "outdoors"],
     circumstances: ["free", "solo-friendly", "step-free", "drop-in"],
     goingCount: 320, matchScore: 0.93,
@@ -549,6 +580,7 @@ const RAW_EVENTS = [
     travelMinutes: 10, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["sports", "social"],
     circumstances: ["free", "drop-in", "beginner-welcome", "solo-friendly", "no-alcohol"],
     goingCount: 52, matchScore: 0.79,
@@ -564,6 +596,7 @@ const RAW_EVENTS = [
     travelMinutes: 6, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["tech", "startups", "social"],
     circumstances: ["free", "free-food", "beginner-welcome", "solo-friendly", "step-free"],
     goingCount: 130, matchScore: 0.92,
@@ -579,6 +612,7 @@ const RAW_EVENTS = [
     travelMinutes: 17, travelMode: "transit",
     price: 0, currency: "CAD", costTier: "free",
     scope: "kw",
+    setting: "outdoor",
     tags: ["wellness", "outdoors"],
     circumstances: ["free", "beginner-welcome", "solo-friendly", "no-alcohol", "quiet"],
     goingCount: 44, matchScore: 0.77,
@@ -594,6 +628,7 @@ const RAW_EVENTS = [
     travelMinutes: 9, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["career", "academic"],
     circumstances: ["free", "free-food", "beginner-welcome", "solo-friendly", "step-free"],
     goingCount: 175, matchScore: 0.95,
@@ -609,6 +644,7 @@ const RAW_EVENTS = [
     travelMinutes: 13, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["music", "social"],
     circumstances: ["free", "solo-friendly", "drop-in", "beginner-welcome"],
     goingCount: 46, matchScore: 0.78,
@@ -624,6 +660,7 @@ const RAW_EVENTS = [
     travelMinutes: 9, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["games", "social"],
     circumstances: ["free", "solo-friendly", "drop-in", "beginner-welcome"],
     goingCount: 120, matchScore: 0.9,
@@ -639,6 +676,7 @@ const RAW_EVENTS = [
     travelMinutes: 9, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["arts", "social"],
     circumstances: ["free", "free-food", "solo-friendly", "drop-in", "step-free"],
     goingCount: 240, matchScore: 0.93,
@@ -654,6 +692,7 @@ const RAW_EVENTS = [
     travelMinutes: 45, travelMode: "transit",
     price: 20, currency: "CAD", costTier: "moderate",
     scope: "kw",
+    setting: "indoor",
     tags: ["sports", "wellness"],
     circumstances: ["student-price", "beginner-welcome", "solo-friendly", "no-alcohol"],
     goingCount: 25, matchScore: 0.54,
@@ -669,6 +708,7 @@ const RAW_EVENTS = [
     travelMinutes: 11, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["social", "academic"],
     circumstances: ["free", "solo-friendly", "beginner-welcome", "quiet", "step-free"],
     goingCount: 58, matchScore: 0.8,
@@ -684,6 +724,7 @@ const RAW_EVENTS = [
     travelMinutes: 19, travelMode: "transit",
     price: 10, currency: "CAD", costTier: "moderate",
     scope: "kw",
+    setting: "indoor",
     tags: ["music"],
     circumstances: ["student-price", "solo-friendly", "step-free"],
     goingCount: 90, matchScore: 0.55,
@@ -699,6 +740,7 @@ const RAW_EVENTS = [
     travelMinutes: 36, travelMode: "transit",
     price: 8, currency: "CAD", costTier: "cheap",
     scope: "kw",
+    setting: "indoor",
     tags: ["arts", "social"],
     circumstances: ["student-price", "beginner-welcome", "solo-friendly"],
     goingCount: 48, matchScore: 0.58,
@@ -714,6 +756,7 @@ const RAW_EVENTS = [
     travelMinutes: 36, travelMode: "transit",
     price: 0, currency: "CAD", costTier: "free",
     scope: "kw",
+    setting: "indoor",
     tags: ["music", "arts"],
     circumstances: ["free", "student-price", "solo-friendly", "quiet", "step-free"],
     goingCount: 140, matchScore: 0.83,
@@ -729,6 +772,7 @@ const RAW_EVENTS = [
     travelMinutes: 20, travelMode: "transit",
     price: 0, currency: "CAD", costTier: "free",
     scope: "kw",
+    setting: "indoor",
     tags: ["sports", "social"],
     circumstances: ["free", "drop-in", "solo-friendly", "beginner-welcome"],
     goingCount: 36, matchScore: 0.76,
@@ -744,6 +788,7 @@ const RAW_EVENTS = [
     travelMinutes: 10, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["academic", "wellness"],
     circumstances: ["free", "free-food", "quiet", "solo-friendly", "drop-in", "no-alcohol"],
     goingCount: 85, matchScore: 0.74,
@@ -759,6 +804,7 @@ const RAW_EVENTS = [
     travelMinutes: 18, travelMode: "transit",
     price: 0, currency: "CAD", costTier: "free",
     scope: "kw",
+    setting: "indoor",
     tags: ["music", "social"],
     circumstances: ["free", "solo-friendly", "drop-in"],
     goingCount: 110, matchScore: 0.78,
@@ -774,6 +820,7 @@ const RAW_EVENTS = [
     travelMinutes: 18, travelMode: "transit",
     price: 5, currency: "CAD", costTier: "cheap",
     scope: "kw",
+    setting: "indoor",
     tags: ["arts", "social"],
     circumstances: ["student-price", "solo-friendly"],
     goingCount: 76, matchScore: 0.53,
@@ -789,6 +836,7 @@ const RAW_EVENTS = [
     travelMinutes: 19, travelMode: "transit",
     price: 6, currency: "CAD", costTier: "cheap",
     scope: "kw",
+    setting: "outdoor",
     tags: ["games", "food", "social"],
     circumstances: ["student-price", "solo-friendly", "drop-in", "no-alcohol"],
     goingCount: 42, matchScore: 0.47,
@@ -804,6 +852,7 @@ const RAW_EVENTS = [
     travelMinutes: 12, travelMode: "walk",
     price: 5, currency: "CAD", costTier: "cheap",
     scope: "campus",
+    setting: "indoor",
     tags: ["sports", "social"],
     circumstances: ["student-price", "solo-friendly", "beginner-welcome", "no-alcohol"],
     goingCount: 64, matchScore: 0.61,
@@ -819,6 +868,7 @@ const RAW_EVENTS = [
     travelMinutes: 17, travelMode: "transit",
     price: 15, currency: "CAD", costTier: "moderate",
     scope: "kw",
+    setting: "indoor",
     tags: ["music"],
     circumstances: ["student-price", "solo-friendly"],
     goingCount: 185, matchScore: 0.71,
@@ -834,6 +884,7 @@ const RAW_EVENTS = [
     travelMinutes: 19, travelMode: "transit",
     price: 0, currency: "CAD", costTier: "free",
     scope: "kw",
+    setting: "outdoor",
     tags: ["outdoors", "sports", "wellness"],
     circumstances: ["free", "solo-friendly", "drop-in"],
     goingCount: 19, matchScore: 0.63,
@@ -849,6 +900,7 @@ const RAW_EVENTS = [
     travelMinutes: 19, travelMode: "transit",
     price: 14, currency: "CAD", costTier: "moderate",
     scope: "kw",
+    setting: "outdoor",
     tags: ["food", "social"],
     circumstances: ["student-price", "solo-friendly", "drop-in"],
     goingCount: 58, matchScore: 0.5,
@@ -864,6 +916,7 @@ const RAW_EVENTS = [
     travelMinutes: 10, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["sports", "wellness"],
     circumstances: ["free", "solo-friendly", "quiet", "no-alcohol", "drop-in"],
     goingCount: 41, matchScore: 0.67,
@@ -879,6 +932,7 @@ const RAW_EVENTS = [
     travelMinutes: 16, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "outdoor",
     tags: ["research", "outdoors", "academic"],
     circumstances: ["free", "solo-friendly", "quiet", "beginner-welcome", "no-alcohol"],
     goingCount: 23, matchScore: 0.74,
@@ -894,6 +948,7 @@ const RAW_EVENTS = [
     travelMinutes: 37, travelMode: "transit",
     price: 18, currency: "CAD", costTier: "moderate",
     scope: "kw",
+    setting: "mixed",
     tags: ["food", "social"],
     circumstances: ["student-price", "solo-friendly", "step-free"],
     goingCount: 44, matchScore: 0.47,
@@ -909,6 +964,7 @@ const RAW_EVENTS = [
     travelMinutes: 9, travelMode: "walk",
     price: 0, currency: "CAD", costTier: "free",
     scope: "campus",
+    setting: "indoor",
     tags: ["academic", "social"],
     circumstances: ["free", "beginner-welcome", "solo-friendly", "step-free", "drop-in"],
     goingCount: 67, matchScore: 0.81,
@@ -971,6 +1027,17 @@ export const SEED_EVENTS = RAW_EVENTS.map((e) => {
   const c = VENUE_COORDS[e.venue] || [null, null];
   return { ...e, lat: c[0], lng: c[1] };
 });
+
+
+/* Somewhere to start from when the browser will not share a location. */
+export const QUICK_PLACES = [
+  { id: "phillip",  label: "Phillip & Columbia", lat: 43.4760, lng: -80.5397 },
+  { id: "slc",      label: "UW campus",          lat: 43.4723, lng: -80.5449 },
+  { id: "uptown",   label: "Uptown Waterloo",    lat: 43.4650, lng: -80.5240 },
+  { id: "laurier",  label: "Laurier",            lat: 43.4738, lng: -80.5272 },
+  { id: "kitchener",label: "Downtown Kitchener", lat: 43.4516, lng: -80.4925 },
+  { id: "north",    label: "North Waterloo",     lat: 43.4980, lng: -80.5270 }
+];
 
 export const SEED_USER = {
   origin: { lat: 43.4760, lng: -80.5397, label: "Phillip & Columbia" },
@@ -1089,20 +1156,62 @@ export function similarity(a, b) {
   return SIM.get(`${a}|${b}`) ?? BASE_SIMILARITY;
 }
 
-/* Which artwork palette an event gets, by its leading interest. */
+/* Artwork palette per leading interest: [ground, subject, detail].
+   Chosen so the subject always reads against its ground. */
 export const ART_PALETTES = {
-  music:    ["art-2", "art-5", "art-3"],
-  sports:   ["art-1", "art-4", "art-7"],
-  tech:     ["art-3", "art-6", "art-4"],
-  "ai-ml":  ["art-3", "art-1", "art-6"],
-  career:   ["art-1", "art-7", "art-2"],
-  startups: ["art-2", "art-3", "art-5"],
-  arts:     ["art-5", "art-3", "art-2"],
-  academic: ["art-6", "art-7", "art-3"],
-  research: ["art-6", "art-1", "art-7"],
-  social:   ["art-2", "art-4", "art-1"],
-  wellness: ["art-4", "art-6", "art-3"],
-  outdoors: ["art-4", "art-3", "art-5"],
-  food:     ["art-5", "art-2", "art-4"],
-  games:    ["art-1", "art-5", "art-7"]
+  music:    ["art-5", "art-3", "art-2"],
+  sports:   ["art-1", "art-7", "art-5"],
+  tech:     ["art-3", "art-6", "art-7"],
+  "ai-ml":  ["art-3", "art-5", "art-6"],
+  career:   ["art-6", "art-7", "art-3"],
+  startups: ["art-2", "art-7", "art-3"],
+  arts:     ["art-4", "art-3", "art-2"],
+  academic: ["art-7", "art-3", "art-1"],
+  research: ["art-3", "art-5", "art-7"],
+  social:   ["art-1", "art-5", "art-7"],
+  wellness: ["art-6", "art-4", "art-7"],
+  outdoors: ["art-5", "art-6", "art-3"],
+  food:     ["art-5", "art-2", "art-3"],
+  games:    ["art-1", "art-2", "art-7"]
 };
+
+/* ---- weather ---------------------------------------------------------
+   Open-Meteo needs no key and allows browser requests, so the forecast
+   can drive the ranking without anyone signing up for anything. Only the
+   origin coordinates are sent. */
+
+export const WEATHER_URL = "https://api.open-meteo.com/v1/forecast";
+
+/* Used when the forecast cannot be fetched, so the ranking still has
+   something to work from. Labelled in the interface as a sample. */
+export const SAMPLE_FORECAST = {
+  sample: true,
+  hours: Object.fromEntries(
+    [[6, 13, 5], [7, 14, 5], [8, 15, 5], [9, 17, 10], [10, 18, 10], [11, 19, 15],
+     [12, 20, 15], [13, 21, 20], [14, 21, 25], [15, 20, 35], [16, 19, 45],
+     [17, 18, 55], [18, 17, 70], [19, 16, 80], [20, 15, 75], [21, 15, 60],
+     [22, 14, 40], [23, 14, 30], [0, 13, 20], [1, 13, 15], [2, 12, 10],
+     [3, 12, 10], [4, 12, 5], [5, 12, 5]]
+      .map(([h, t, r]) => [h, { temp: t, rain: r }])
+  )
+};
+
+export async function fetchForecast(origin) {
+  const url = `${WEATHER_URL}?latitude=${origin.lat.toFixed(4)}&longitude=${origin.lng.toFixed(4)}` +
+    `&hourly=temperature_2m,precipitation_probability&timezone=America%2FToronto&forecast_days=2`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`weather ${r.status}`);
+  const j = await r.json();
+  const hourly = j.hourly || {};
+  const times = hourly.time || [];
+  const hours = {};
+  times.forEach((t, i) => {
+    if (!String(t).startsWith(D)) return;
+    hours[Number(String(t).slice(11, 13))] = {
+      temp: hourly.temperature_2m?.[i] ?? null,
+      rain: hourly.precipitation_probability?.[i] ?? 0
+    };
+  });
+  if (!Object.keys(hours).length) throw new Error("no hours for today");
+  return { sample: false, hours };
+}

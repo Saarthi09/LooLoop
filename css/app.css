@@ -301,6 +301,13 @@ body {
   margin: 10px 0 0 0;
   color: var(--ink-2);
   font-size: 13px;
+  max-width: 46ch;
+}
+
+.ask-sub {
+  margin: 16px 0 7px 0;
+  color: var(--ink-2);
+  font-size: 13px;
 }
 
 .times { display: flex; flex-wrap: wrap; gap: 16px; }
