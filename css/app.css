@@ -89,6 +89,7 @@ body {
 .side .link { color: var(--on-deep-2); }
 .side .link:hover { color: var(--on-deep); }
 .side .link:focus-visible { outline-color: var(--accent); }
+.side .now-effect { color: var(--on-deep); font-weight: 500; }
 
 .wordmark-deep { color: var(--on-deep); }
 
@@ -580,6 +581,57 @@ body {
 
 .tip-why::first-letter { text-transform: uppercase; }
 
+/* ---- compatibility with each answer ---------------------------------- */
+
+.compat { margin: 9px 0 0 0; }
+
+.compat-h {
+  margin: 0 0 4px 0;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+.compat-rows { display: grid; gap: 3px; }
+
+.compat-row {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) 30px;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.compat.is-full .compat-row { grid-template-columns: 62px minmax(0, 1fr) 30px minmax(0, 1.2fr); }
+
+.compat-k { color: var(--ink-2); }
+
+.compat-bar {
+  display: block;
+  height: 6px;
+  border-radius: var(--r-sm);
+  background: var(--paper-2);
+  overflow: hidden;
+}
+
+.compat-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.compat-v {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.compat-n {
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ---- the match percentage -------------------------------------------- */
 
 /* Sits on generated artwork of any colour, including the accent itself,
@@ -1026,8 +1078,19 @@ body {
     gap: 12px;
   }
 
-  /* On a phone the chart comes first; the answers follow it. */
-  .shell.is-results .side { order: 2; }
+  /* On a phone the wordmark and nav stay first, the chart comes next,
+     and only the answers follow it. The side panel's two halves become
+     grid items of their own so they can sit either side of the main. */
+  .shell.is-results .side { display: contents; }
+  .shell.is-results .side-top,
+  .shell.is-results .side-body {
+    background: var(--deep);
+    color: var(--on-deep);
+    padding: 18px 20px;
+  }
+  .shell.is-results .side-top { order: 0; margin: 0; padding-bottom: 14px; }
+  .shell.is-results .main { order: 1; }
+  .shell.is-results .side-body { order: 2; gap: 12px; }
 
   .step-count { margin-top: 6px; }
   .step-live { margin-top: 14px; }

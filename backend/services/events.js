@@ -77,7 +77,11 @@ const OUTDOOR = /outdoor|\bpark\b|trail|hik(e|ing)|garden|\bfield|patio|amphithe
 
 /* ---- time ------------------------------------------------------------ */
 
-export const isDateString = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
+/* Shape and a real calendar date: 2026-13-45 must fall back to today
+   rather than reach torontoDayRange with an invalid Date. */
+export const isDateString = (value) =>
+  /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) &&
+  !Number.isNaN(new Date(`${value}T12:00:00Z`).getTime());
 
 export function localDateOf(value) {
   const d = value instanceof Date ? value : new Date(value);

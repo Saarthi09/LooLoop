@@ -94,7 +94,8 @@ function decorate(events, f) {
   const now = nowHour();
   return events.map((e) => {
     const h = hourOf(e.startsAt);
-    const endHour = hourOf(e.endsAt);
+    let endHour = hourOf(e.endsAt);
+    if (endHour < h) endHour += 24;   /* a live listing that runs past midnight */
     const travel = travelFor(e);
     const duration = Math.max(0, endHour - h) * 60;
 
@@ -271,6 +272,66 @@ function why(e) {
   if (!e.reachable) return "too far";
   if (!e.inWindow) return "wrong time";
   return "ruled out";
+}
+
+/* ---- compatibility with each answer -----------------------------------
+   The percentage is one number; this is the same arithmetic opened up so
+   a person can see which of their answers an event fits and which it
+   does not. Every row is a component the percentage already uses. */
+
+function compat(e) {
+  const f = state.filters;
+  const rows = [];
+
+  if (f.interests.length) {
+    let best = { w: null, sim: 0 };
+    for (const w of f.interests) {
+      for (const t of e.tags) {
+        const sim = similarity(w, t);
+        if (sim > best.sim) best = { w, sim };
+      }
+    }
+    const how = best.sim >= 0.99 ? "exactly" : best.sim >= 0.5 ? "close" : "not really";
+    rows.push({ key: "into", label: "Into", score: interestFit(e), note: `${labelOf(INTERESTS, best.w)}, ${how}` });
+  } else {
+    rows.push({ key: "into", label: "Into", score: null, note: "nothing picked" });
+  }
+
+  rows.push({ key: "spend", label: "Spend", score: moneyFit(e), note: costLine(e).toLowerCase() });
+  rows.push({ key: "free", label: "Free", score: timeFit(e), note: e.inWindow ? "in your window" : "outside your window" });
+  rows.push({ key: "range", label: "Range", score: travelFit(e), note: `${e.travelMinutes} min ${modeWord(e.travelMode)}` });
+
+  const met = f.circumstances.filter((c) => has(e, c)).length;
+  rows.push({
+    key: "needs", label: "Needs",
+    score: f.circumstances.length ? circFit(e) : null,
+    note: f.circumstances.length ? `${met} of ${f.circumstances.length} met` : "none asked for"
+  });
+
+  const w = weatherAt(e.hour);
+  const nowNote = !e.catchable ? "you'd miss it"
+    : e.leaveInMin >= 0 && e.leaveInMin <= 25 ? `leave in ${e.leaveInMin} min`
+      : w && (w.rain ?? 0) >= 40 && e.setting !== "indoor" ? `${w.rain}% rain, outdoors`
+        : "fine";
+  rows.push({ key: "now", label: "Right now", score: (timingFit(e) + weatherFit(e)) / 2, note: nowNote });
+
+  return rows;
+}
+
+function compatHTML(e, full) {
+  const rows = compat(e);
+  return `<div class="compat${full ? " is-full" : ""}">
+    <p class="compat-h">How it fits your answers</p>
+    <div class="compat-rows">${rows.map((r) => {
+      const pct = r.score == null ? null : Math.round(r.score * 100);
+      return `<div class="compat-row">
+        <span class="compat-k">${r.label}</span>
+        <span class="compat-bar" aria-hidden="true"><i style="width:${pct ?? 0}%"></i></span>
+        <span class="compat-v">${pct == null ? "any" : pct}</span>
+        ${full ? `<span class="compat-n">${esc(r.note)}</span>` : ""}
+      </div>`;
+    }).join("")}</div>
+  </div>`;
 }
 
 function rank(e) {
@@ -751,8 +812,12 @@ function mountWizard() {
     if (!at) return;
     if (at.screen === "results" && state.screen !== "results") return enterResults({ fromHistory: true });
     if (at.screen === "wizard") {
+      /* Arriving here by Back is an edit of results that already exist,
+         and the step body must be rebuilt from state, not the stale DOM. */
+      if (state.screen === "results") state.returnTo = "results";
       state.screen = "wizard";
       state.step = at.step;
+      builtStep = -1;
       render();
     }
   });
@@ -813,6 +878,7 @@ function wireStep(s) {
       if (v == null) return;
       state.filters.windowStart = Math.min(v, state.filters.windowEnd - 0.25);
       fitSpan();
+      if (state.clockFallback) pickClock();
       updateStep();
     });
     to.addEventListener("change", () => {
@@ -820,6 +886,7 @@ function wireStep(s) {
       if (v == null) return;
       state.filters.windowEnd = Math.max(v, state.filters.windowStart + 0.25);
       fitSpan();
+      if (state.clockFallback) pickClock();
       updateStep();
     });
   }
@@ -1080,6 +1147,22 @@ async function useMyLocation() {
 
 const CIRCLES_URL = "circles.html";
 const joined = new Set();
+
+/* The only "going" number shown anywhere is the count of students who
+   actually joined that event's circle. The live feed carries it already;
+   sample listings start at zero and pick it up from here if someone has
+   joined one of them. */
+async function loadCircleCounts() {
+  try {
+    const j = await api("/api/circles");
+    const counts = new Map((j.circles || []).map((c) => [String(c.event_id), c.member_count || 0]));
+    state.events.forEach((e) => { e.goingCount = counts.get(String(e.id)) || 0; });
+    render();
+  } catch (err) {
+    /* Without the server the counts stay as the feed gave them: real for
+       live listings, none for samples. Nothing is invented. */
+  }
+}
 
 async function loadJoined() {
   if (!session()) return;
@@ -1435,6 +1518,7 @@ function cardHTML(e, lead) {
       <p class="card-venue">${esc(e.venue)}</p>
       <p class="card-desc">${esc(e.description || "")}</p>
       ${weatherNote(e)}
+      ${compatHTML(e, lead)}
       <dl class="card-facts">
         <div><dt>Costs</dt><dd><strong>${costLine(e)}</strong></dd></div>
         <div><dt>Getting there</dt><dd><strong>${e.travelMinutes} min</strong> ${modeWord(e.travelMode)}</dd></div>
@@ -1478,6 +1562,7 @@ function showTip(e, dot) {
         <dt>Leave by</dt><dd><strong>${fmtClock(e.leaveBy)}</strong>, back by <strong>${fmtClock(e.backBy)}</strong></dd>
       </dl>
       ${weatherNote(e)}
+      ${compatHTML(e, true)}
       <p class="tip-why">${why(e)}</p>
     </div>`;
   el.tip.hidden = false;
@@ -1612,6 +1697,7 @@ loadEvents()
       }, 950);
     }
     render();
+    loadCircleCounts();
     loadJoined();
   })
   .catch((err) => {

@@ -18,7 +18,10 @@ const offsetOf = (d) => {
   return `${m < 0 ? "-" : "+"}${pad(Math.floor(Math.abs(m) / 60))}:${pad(Math.abs(m) % 60)}`;
 };
 const wanted = new URLSearchParams(window.location.search).get("date");
-export const TODAY = /^\d{4}-\d{2}-\d{2}$/.test(wanted || "") ? wanted : localDate(new Date());
+/* The shape alone lets 2026-13-45 through, which stamps every seed with a
+   NaN offset. A real date round-trips through Date and back unchanged. */
+const isCalendarDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && localDate(new Date(`${v}T12:00:00`)) === v;
+export const TODAY = isCalendarDate(wanted || "") ? wanted : localDate(new Date());
 const D = TODAY;
 const Z = offsetOf(new Date(`${D}T12:00:00`));
 const at = (t) => `${D}T${t}:00${Z}`;
@@ -105,7 +108,7 @@ const RAW_EVENTS = [
     setting: "outdoor",
     tags: ["outdoors", "sports", "wellness"],
     circumstances: ["free", "solo-friendly", "beginner-welcome", "drop-in"],
-    goingCount: 24, matchScore: 0.74,
+    goingCount: 0, matchScore: 0.74,
     source: { name: "Instagram", url: "https://instagram.com" },
     imageUrl: null,
     description: "Two pace groups. The slow one walks the hill and nobody minds."
@@ -121,7 +124,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["sports", "wellness"],
     circumstances: ["student-price", "solo-friendly", "no-alcohol", "step-free"],
-    goingCount: 11, matchScore: 0.42,
+    goingCount: 0, matchScore: 0.42,
     source: { name: "Venue site", url: "https://example.ca" },
     imageUrl: null,
     description: "Four dollars with a student card. Towels are not included, bring one."
@@ -137,7 +140,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["food", "social"],
     circumstances: ["free", "free-food", "drop-in", "solo-friendly", "step-free"],
-    goingCount: 210, matchScore: 0.93,
+    goingCount: 0, matchScore: 0.93,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "Eggs, toast and coffee in the Great Hall. Queue moves faster after half eight."
@@ -153,7 +156,7 @@ const RAW_EVENTS = [
     setting: "mixed",
     tags: ["food", "social", "outdoors"],
     circumstances: ["free", "solo-friendly", "step-free"],
-    goingCount: 140, matchScore: 0.83,
+    goingCount: 0, matchScore: 0.83,
     source: { name: "Venue site", url: "https://example.ca" },
     imageUrl: null,
     description: "Free to walk in, you only pay for what you buy. Route 21 goes most of the way."
@@ -169,7 +172,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["sports", "wellness"],
     circumstances: ["free", "drop-in", "beginner-welcome", "solo-friendly", "no-alcohol"],
-    goingCount: 30, matchScore: 0.75,
+    goingCount: 0, matchScore: 0.75,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "Turn up with running shoes. They put singles into doubles games."
@@ -185,7 +188,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["tech", "academic"],
     circumstances: ["free", "beginner-welcome", "no-alcohol", "quiet", "drop-in"],
-    goingCount: 45, matchScore: 0.77,
+    goingCount: 0, matchScore: 0.77,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "Bring a laptop if you have one. Two machines at the back if you do not."
@@ -201,7 +204,7 @@ const RAW_EVENTS = [
     setting: "outdoor",
     tags: ["outdoors", "sports", "wellness"],
     circumstances: ["free", "solo-friendly", "beginner-welcome"],
-    goingCount: 62, matchScore: 0.8,
+    goingCount: 0, matchScore: 0.8,
     source: { name: "Instagram", url: "https://instagram.com" },
     imageUrl: null,
     description: "Register once online, run it any week. Walkers finish last and get clapped in."
@@ -217,7 +220,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["social", "academic"],
     circumstances: ["free", "solo-friendly", "drop-in", "step-free", "free-food"],
-    goingCount: 900, matchScore: 0.93,
+    goingCount: 0, matchScore: 0.93,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "Most tables give away food to get you to sign up. That is a legitimate lunch plan."
@@ -233,7 +236,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["arts", "social"],
     circumstances: ["free", "solo-friendly", "step-free", "quiet"],
-    goingCount: 70, matchScore: 0.72,
+    goingCount: 0, matchScore: 0.72,
     source: { name: "Venue site", url: "https://example.ca" },
     imageUrl: null,
     description: "Three floors, no ticket needed before one o'clock. The ION stops outside."
@@ -249,7 +252,7 @@ const RAW_EVENTS = [
     setting: "outdoor",
     tags: ["outdoors", "wellness"],
     circumstances: ["free", "solo-friendly", "beginner-welcome", "quiet"],
-    goingCount: 18, matchScore: 0.73,
+    goingCount: 0, matchScore: 0.73,
     source: { name: "Meetup", url: "https://meetup.com" },
     imageUrl: null,
     description: "Flat gravel the whole way. Good if you have not left campus in a week."
@@ -265,7 +268,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["career", "academic"],
     circumstances: ["free", "beginner-welcome", "no-alcohol", "drop-in", "step-free"],
-    goingCount: 64, matchScore: 0.81,
+    goingCount: 0, matchScore: 0.81,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "An advisor reads it in front of you and marks it up. Bring it on your phone."
@@ -281,7 +284,7 @@ const RAW_EVENTS = [
     setting: "outdoor",
     tags: ["food", "social", "outdoors"],
     circumstances: ["free", "solo-friendly", "step-free", "drop-in"],
-    goingCount: 220, matchScore: 0.93,
+    goingCount: 0, matchScore: 0.93,
     source: { name: "Venue site", url: "https://example.ca" },
     imageUrl: null,
     description: "Free to wander. Most trucks do a student price if you ask."
@@ -297,7 +300,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["food", "social"],
     circumstances: ["free", "free-food", "solo-friendly", "beginner-welcome", "step-free"],
-    goingCount: 160, matchScore: 0.95,
+    goingCount: 0, matchScore: 0.95,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "Hot food, no ticket. They seat you with people from your faculty."
@@ -313,7 +316,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["tech", "academic", "research"],
     circumstances: ["free", "beginner-welcome", "quiet", "no-alcohol", "step-free"],
-    goingCount: 120, matchScore: 0.9,
+    goingCount: 0, matchScore: 0.9,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "Forty minutes, then questions. No physics past first year is assumed."
@@ -329,7 +332,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["tech", "ai-ml", "career"],
     circumstances: ["free", "free-food", "beginner-welcome", "solo-friendly", "step-free"],
-    goingCount: 95, matchScore: 0.86,
+    goingCount: 0, matchScore: 0.86,
     source: { name: "Meetup", url: "https://meetup.com" },
     imageUrl: null,
     description: "A talk, a demo, then food and people to talk to. Students get in free."
@@ -345,7 +348,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["games", "social"],
     circumstances: ["free", "drop-in", "solo-friendly", "beginner-welcome", "no-alcohol"],
-    goingCount: 26, matchScore: 0.74,
+    goingCount: 0, matchScore: 0.74,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "Tables by the turnkey desk. Someone will teach you the openings if you ask."
@@ -361,7 +364,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["ai-ml", "tech", "research", "academic"],
     circumstances: ["free", "quiet", "no-alcohol", "solo-friendly"],
-    goingCount: 38, matchScore: 0.66,
+    goingCount: 0, matchScore: 0.66,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "One paper a week. The first session is deliberately an easy one."
@@ -377,7 +380,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["arts"],
     circumstances: ["student-price", "beginner-welcome", "no-alcohol", "solo-friendly", "step-free"],
-    goingCount: 14, matchScore: 0.52,
+    goingCount: 0, matchScore: 0.52,
     source: { name: "Venue site", url: "https://example.ca" },
     imageUrl: null,
     description: "Twenty five with a student card. They fire it and you collect it in three weeks."
@@ -393,7 +396,7 @@ const RAW_EVENTS = [
     setting: "outdoor",
     tags: ["sports", "outdoors"],
     circumstances: ["free", "drop-in", "beginner-welcome", "solo-friendly"],
-    goingCount: 34, matchScore: 0.76,
+    goingCount: 0, matchScore: 0.76,
     source: { name: "Instagram", url: "https://instagram.com" },
     imageUrl: null,
     description: "Bring a light shirt and a dark one. Sides get redrawn every twenty minutes."
@@ -409,7 +412,7 @@ const RAW_EVENTS = [
     setting: "outdoor",
     tags: ["sports", "outdoors"],
     circumstances: ["free", "beginner-welcome", "solo-friendly", "drop-in"],
-    goingCount: 28, matchScore: 0.75,
+    goingCount: 0, matchScore: 0.75,
     source: { name: "Meetup", url: "https://meetup.com" },
     imageUrl: null,
     description: "They will explain the rules in five minutes at the start."
@@ -425,7 +428,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["startups", "career", "tech"],
     circumstances: ["free", "beginner-welcome", "no-alcohol", "step-free"],
-    goingCount: 40, matchScore: 0.77,
+    goingCount: 0, matchScore: 0.77,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "You do not need a company. Half the slots are people asking what to do next."
@@ -441,7 +444,7 @@ const RAW_EVENTS = [
     setting: "outdoor",
     tags: ["outdoors", "sports"],
     circumstances: ["student-price", "beginner-welcome", "no-alcohol", "solo-friendly"],
-    goingCount: 16, matchScore: 0.53,
+    goingCount: 0, matchScore: 0.53,
     source: { name: "Venue site", url: "https://example.ca" },
     imageUrl: null,
     description: "Eight dollars for two hours. They pair you up if you turn up alone."
@@ -457,7 +460,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["wellness"],
     circumstances: ["free", "drop-in", "quiet", "no-alcohol", "solo-friendly", "step-free"],
-    goingCount: 22, matchScore: 0.64,
+    goingCount: 0, matchScore: 0.64,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "No appointment and no file opened. You can sit and say nothing."
@@ -473,7 +476,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["games", "social"],
     circumstances: ["free", "drop-in", "solo-friendly", "beginner-welcome", "step-free"],
-    goingCount: 48, matchScore: 0.78,
+    goingCount: 0, matchScore: 0.78,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "Four hundred games behind the desk. Leave your Watcard, take a box."
@@ -489,7 +492,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["arts", "social"],
     circumstances: ["student-price", "solo-friendly", "quiet", "step-free"],
-    goingCount: 55, matchScore: 0.49,
+    goingCount: 0, matchScore: 0.49,
     source: { name: "Venue site", url: "https://example.ca" },
     imageUrl: null,
     description: "The small screen upstairs. Nine dollars any showing before six."
@@ -505,7 +508,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["sports", "wellness"],
     circumstances: ["student-price", "beginner-welcome", "solo-friendly", "no-alcohol"],
-    goingCount: 31, matchScore: 0.55,
+    goingCount: 0, matchScore: 0.55,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "Five dollars including rentals. Half the ice is held for people holding the boards."
@@ -521,7 +524,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["food", "wellness", "academic"],
     circumstances: ["free", "free-food", "beginner-welcome", "no-alcohol", "solo-friendly"],
-    goingCount: 36, matchScore: 0.76,
+    goingCount: 0, matchScore: 0.76,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "A live demo, then you eat what was made. Recipes cost under four dollars a portion."
@@ -537,7 +540,7 @@ const RAW_EVENTS = [
     setting: "outdoor",
     tags: ["outdoors", "social", "wellness"],
     circumstances: ["free", "solo-friendly", "drop-in", "no-alcohol"],
-    goingCount: 12, matchScore: 0.62,
+    goingCount: 0, matchScore: 0.62,
     source: { name: "Meetup", url: "https://meetup.com" },
     imageUrl: null,
     description: "Weeding and bed turnover. Gloves are not provided, bring your own."
@@ -553,7 +556,7 @@ const RAW_EVENTS = [
     setting: "outdoor",
     tags: ["outdoors", "tech"],
     circumstances: ["free", "drop-in", "beginner-welcome", "solo-friendly", "no-alcohol"],
-    goingCount: 27, matchScore: 0.74,
+    goingCount: 0, matchScore: 0.74,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "Volunteers show you rather than do it. Parts at cost if you need them."
@@ -569,7 +572,7 @@ const RAW_EVENTS = [
     setting: "outdoor",
     tags: ["social", "arts"],
     circumstances: ["free", "solo-friendly", "step-free", "no-alcohol"],
-    goingCount: 88, matchScore: 0.75,
+    goingCount: 0, matchScore: 0.75,
     source: { name: "Instagram", url: "https://instagram.com" },
     imageUrl: null,
     description: "Sorted by size on rails. Whatever is left goes to a shelter on Monday."
@@ -585,7 +588,7 @@ const RAW_EVENTS = [
     setting: "outdoor",
     tags: ["food", "social", "outdoors"],
     circumstances: ["free", "solo-friendly", "step-free", "drop-in"],
-    goingCount: 320, matchScore: 0.93,
+    goingCount: 0, matchScore: 0.93,
     source: { name: "Venue site", url: "https://example.ca" },
     imageUrl: null,
     description: "Free entry, food from six dollars. The ION drops you at the door."
@@ -601,7 +604,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["sports", "social"],
     circumstances: ["free", "drop-in", "beginner-welcome", "solo-friendly", "no-alcohol"],
-    goingCount: 52, matchScore: 0.79,
+    goingCount: 0, matchScore: 0.79,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "Turn up alone and they will put you on a short team. No kit needed."
@@ -617,7 +620,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["tech", "startups", "social"],
     circumstances: ["free", "free-food", "beginner-welcome", "solo-friendly", "step-free"],
-    goingCount: 130, matchScore: 0.92,
+    goingCount: 0, matchScore: 0.92,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "You stand up, say what you can do, and sit down. Pizza at seven."
@@ -633,7 +636,7 @@ const RAW_EVENTS = [
     setting: "outdoor",
     tags: ["wellness", "outdoors"],
     circumstances: ["free", "beginner-welcome", "solo-friendly", "no-alcohol", "quiet"],
-    goingCount: 44, matchScore: 0.77,
+    goingCount: 0, matchScore: 0.77,
     source: { name: "Instagram", url: "https://instagram.com" },
     imageUrl: null,
     description: "Spare mats by the bandstand. Cancelled if it rains, they post by five."
@@ -649,7 +652,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["career", "academic"],
     circumstances: ["free", "free-food", "beginner-welcome", "solo-friendly", "step-free"],
-    goingCount: 175, matchScore: 0.95,
+    goingCount: 0, matchScore: 0.95,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "Three upper years say what they actually did. Pizza before, not after."
@@ -665,7 +668,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["music", "social"],
     circumstances: ["free", "solo-friendly", "drop-in", "beginner-welcome"],
-    goingCount: 46, matchScore: 0.78,
+    goingCount: 0, matchScore: 0.78,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "You can just watch. Nobody is made to play and the room is small."
@@ -681,7 +684,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["games", "social"],
     circumstances: ["free", "solo-friendly", "drop-in", "beginner-welcome"],
-    goingCount: 120, matchScore: 0.9,
+    goingCount: 0, matchScore: 0.9,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "Come alone and the host sticks you on a team that is short."
@@ -697,7 +700,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["arts", "social"],
     circumstances: ["free", "free-food", "solo-friendly", "drop-in", "step-free"],
-    goingCount: 240, matchScore: 0.93,
+    goingCount: 0, matchScore: 0.93,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "Projected in the Great Hall. Floor cushions go fast, the chairs do not."
@@ -713,7 +716,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["sports", "wellness"],
     circumstances: ["student-price", "beginner-welcome", "solo-friendly", "no-alcohol"],
-    goingCount: 25, matchScore: 0.54,
+    goingCount: 0, matchScore: 0.54,
     source: { name: "Venue site", url: "https://example.ca" },
     imageUrl: null,
     description: "Twenty with a student card, including rentals. Forty minutes of teaching first."
@@ -729,7 +732,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["social", "academic"],
     circumstances: ["free", "solo-friendly", "beginner-welcome", "quiet", "step-free"],
-    goingCount: 58, matchScore: 0.8,
+    goingCount: 0, matchScore: 0.8,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "Everyone moves one seat over when the bell goes. No level required."
@@ -745,7 +748,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["music"],
     circumstances: ["student-price", "solo-friendly", "step-free"],
-    goingCount: 90, matchScore: 0.55,
+    goingCount: 0, matchScore: 0.55,
     source: { name: "Venue site", url: "https://example.ca" },
     imageUrl: null,
     description: "Ten dollars with a student card. Seats at the bar if you are early."
@@ -761,7 +764,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["arts", "social"],
     circumstances: ["student-price", "beginner-welcome", "solo-friendly"],
-    goingCount: 48, matchScore: 0.58,
+    goingCount: 0, matchScore: 0.58,
     source: { name: "Venue site", url: "https://example.ca" },
     imageUrl: null,
     description: "Names in a hat at half seven, teams drawn at random. Eight dollars."
@@ -777,7 +780,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["music", "arts"],
     circumstances: ["free", "student-price", "solo-friendly", "quiet", "step-free"],
-    goingCount: 140, matchScore: 0.83,
+    goingCount: 0, matchScore: 0.83,
     source: { name: "Ticketmaster", url: "https://ticketmaster.ca" },
     imageUrl: null,
     description: "You sit in the stalls while they stop and start. Leave whenever you like."
@@ -793,7 +796,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["sports", "social"],
     circumstances: ["free", "drop-in", "solo-friendly", "beginner-welcome"],
-    goingCount: 36, matchScore: 0.76,
+    goingCount: 0, matchScore: 0.76,
     source: { name: "Instagram", url: "https://instagram.com" },
     imageUrl: null,
     description: "Winners hold the court. Call your own fouls, nobody argues much."
@@ -809,7 +812,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["academic", "wellness"],
     circumstances: ["free", "free-food", "quiet", "solo-friendly", "drop-in", "no-alcohol"],
-    goingCount: 85, matchScore: 0.74,
+    goingCount: 0, matchScore: 0.74,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "Silent room and a talking room. Coffee and biscuits at the front."
@@ -825,7 +828,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["music", "social"],
     circumstances: ["free", "solo-friendly", "drop-in"],
-    goingCount: 110, matchScore: 0.78,
+    goingCount: 0, matchScore: 0.78,
     source: { name: "Instagram", url: "https://instagram.com" },
     imageUrl: null,
     description: "No cover charge. Two people have to go up before they will let you duet."
@@ -841,7 +844,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["arts", "social"],
     circumstances: ["student-price", "solo-friendly"],
-    goingCount: 76, matchScore: 0.53,
+    goingCount: 0, matchScore: 0.53,
     source: { name: "Ticketmaster", url: "https://ticketmaster.ca" },
     imageUrl: null,
     description: "Upstairs room, seven acts, none of them longer than ten minutes."
@@ -857,7 +860,7 @@ const RAW_EVENTS = [
     setting: "outdoor",
     tags: ["games", "food", "social"],
     circumstances: ["student-price", "solo-friendly", "drop-in", "no-alcohol"],
-    goingCount: 42, matchScore: 0.47,
+    goingCount: 0, matchScore: 0.47,
     source: { name: "Meetup", url: "https://meetup.com" },
     imageUrl: null,
     description: "You buy a drink, the games are free. Table at the back is the regulars."
@@ -873,7 +876,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["sports", "social"],
     circumstances: ["student-price", "solo-friendly", "beginner-welcome", "no-alcohol"],
-    goingCount: 64, matchScore: 0.61,
+    goingCount: 0, matchScore: 0.61,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "Five dollars with rentals. Quieter than the afternoon session."
@@ -889,7 +892,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["music"],
     circumstances: ["student-price", "solo-friendly"],
-    goingCount: 185, matchScore: 0.71,
+    goingCount: 0, matchScore: 0.71,
     source: { name: "Ticketmaster", url: "https://ticketmaster.ca" },
     imageUrl: null,
     description: "Fifteen in advance, more on the door. First band closer to ten."
@@ -905,7 +908,7 @@ const RAW_EVENTS = [
     setting: "outdoor",
     tags: ["outdoors", "sports", "wellness"],
     circumstances: ["free", "solo-friendly", "drop-in"],
-    goingCount: 19, matchScore: 0.63,
+    goingCount: 0, matchScore: 0.63,
     source: { name: "Meetup", url: "https://meetup.com" },
     imageUrl: null,
     description: "Lit streets the whole way. Six minute kilometres, back where you started."
@@ -921,7 +924,7 @@ const RAW_EVENTS = [
     setting: "outdoor",
     tags: ["food", "social"],
     circumstances: ["student-price", "solo-friendly", "drop-in"],
-    goingCount: 58, matchScore: 0.5,
+    goingCount: 0, matchScore: 0.5,
     source: { name: "Instagram", url: "https://instagram.com" },
     imageUrl: null,
     description: "Fourteen dollars for a bowl. The queue outside is where people actually talk."
@@ -937,7 +940,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["sports", "wellness"],
     circumstances: ["free", "solo-friendly", "quiet", "no-alcohol", "drop-in"],
-    goingCount: 41, matchScore: 0.67,
+    goingCount: 0, matchScore: 0.67,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "Card access after ten. Emptiest hour of the whole day."
@@ -953,7 +956,7 @@ const RAW_EVENTS = [
     setting: "outdoor",
     tags: ["research", "outdoors", "academic"],
     circumstances: ["free", "solo-friendly", "quiet", "beginner-welcome", "no-alcohol"],
-    goingCount: 23, matchScore: 0.74,
+    goingCount: 0, matchScore: 0.74,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "The society brings four scopes. Cancelled without notice if it clouds over."
@@ -969,7 +972,7 @@ const RAW_EVENTS = [
     setting: "mixed",
     tags: ["food", "social"],
     circumstances: ["student-price", "solo-friendly", "step-free"],
-    goingCount: 44, matchScore: 0.47,
+    goingCount: 0, matchScore: 0.47,
     source: { name: "Instagram", url: "https://instagram.com" },
     imageUrl: null,
     description: "Eighteen a head if four of you share. Cash is faster than the card machine."
@@ -985,7 +988,7 @@ const RAW_EVENTS = [
     setting: "indoor",
     tags: ["academic", "social"],
     circumstances: ["free", "beginner-welcome", "solo-friendly", "step-free", "drop-in"],
-    goingCount: 67, matchScore: 0.81,
+    goingCount: 0, matchScore: 0.81,
     source: { name: "Waterloo Events", url: "https://uwaterloo.ca/events" },
     imageUrl: null,
     description: "Ninety minutes, ends at the library. Shows you where the cheap food is."
