@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Your LooLoop Circles</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main>
+      <nav>
+        <a href="/">Loo<span>Loop</span></a>
+        <div class="nav-actions">
+          <a class="circles-link" href="profile.html">Profile</a>
+          <a class="circles-link" href="/">Discover events →</a>
+        </div>
+      </nav>
+
+      <section class="circles-hero">
+        <p class="eyebrow">STUDENT CIRCLES</p>
+        <h1>Open event<br /><em>circles.</em></h1>
+        <p>
+          See where other students are planning to go, then join the circles
+          that feel right for you.
+        </p>
+      </section>
+
+      <section class="circles-panel">
+        <div class="heading">
+          <div>
+            <p class="eyebrow">FORMING NOW</p>
+            <h2>Explore all circles</h2>
+          </div>
+          <p id="circles-status">Loading open circles…</p>
+        </div>
+        <div id="circles-grid" class="circles-grid"></div>
+      </section>
+
+      <section id="circle-detail" class="circle-detail" hidden>
+        <p class="eyebrow">WHO IS GOING?</p>
+        <h2 id="circle-title"></h2>
+        <p id="circle-date" class="circle-date"></p>
+        <ul id="member-list" class="member-list"></ul>
+        <a
+          id="circle-event-link"
+          class="primary-link"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Event details ↗
+        </a>
+      </section>
+    </main>
+    <script src="circles.js"></script>
+  </body>
+</html>
