@@ -329,11 +329,48 @@ body {
 }
 
 .find {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 6px;
   max-width: 340px;
   margin-bottom: 8px;
+}
+
+/* places like what you typed */
+.suggest {
+  position: absolute;
+  z-index: 6;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin: 4px 0 0 0;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+.suggest li {
+  display: grid;
+  gap: 1px;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+
+.suggest li.is-active,
+.suggest li:hover { background: var(--paper-2); }
+
+.suggest-label { font-size: 14px; font-weight: 500; }
+
+.suggest-detail {
+  font-size: 12px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .find input,
@@ -523,6 +560,7 @@ body {
   border: 1px solid var(--ink);
   border-radius: var(--r-lg);
   background: var(--surface);
+  max-height: calc(100vh - 16px);
   overflow: hidden;
   pointer-events: none;
 }
@@ -601,7 +639,9 @@ body {
   font-size: 12px;
 }
 
-.compat.is-full .compat-row { grid-template-columns: 62px minmax(0, 1fr) 30px minmax(0, 1.2fr); }
+/* In the hover panel the note gets the whole row, so it is never cut. */
+.compat.is-full .compat-row { grid-template-columns: 62px minmax(0, 1fr) 30px; }
+.compat.is-full .compat-n { grid-column: 1 / -1; margin-top: -2px; white-space: normal; }
 
 .compat-k { color: var(--ink-2); }
 
@@ -1078,19 +1118,14 @@ body {
     gap: 12px;
   }
 
-  /* On a phone the wordmark and nav stay first, the chart comes next,
-     and only the answers follow it. The side panel's two halves become
-     grid items of their own so they can sit either side of the main. */
-  .shell.is-results .side { display: contents; }
-  .shell.is-results .side-top,
-  .shell.is-results .side-body {
+  /* On a phone app.js moves the answers panel after the main column, so
+     the DOM order is the visual order. Out here it keeps the deep look. */
+  .shell > #side-results {
     background: var(--deep);
     color: var(--on-deep);
     padding: 18px 20px;
+    gap: 12px;
   }
-  .shell.is-results .side-top { order: 0; margin: 0; padding-bottom: 14px; }
-  .shell.is-results .main { order: 1; }
-  .shell.is-results .side-body { order: 2; gap: 12px; }
 
   .step-count { margin-top: 6px; }
   .step-live { margin-top: 14px; }
@@ -1208,6 +1243,9 @@ body {
   gap: 14px;
   margin-top: 0;
 }
+
+.side-start { margin-left: auto; }
+.side-nav .side-start { font-size: 13px; text-decoration: underline; text-underline-offset: 2px; }
 
 .side-nav a.is-here {
   color: var(--on-deep);

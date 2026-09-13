@@ -64,7 +64,6 @@ async function join(circle) {
       }
     });
     state.mine.add(circle.id);
-    circle.member_count = (circle.member_count || 0) + 1;
     state.note = { id: circle.id, text: "You're in." };
     state.busy = null;
     openCircle(circle.id);
@@ -85,6 +84,9 @@ async function openCircle(id) {
   try {
     const j = await api(`/api/circles/${encodeURIComponent(id)}`, { auth: true });
     state.detail = { circle: j.circle, members: j.members || [] };
+    /* The card shows the same number the list beside it shows. */
+    const card = state.circles.find((x) => x.id === id);
+    if (card) card.member_count = state.detail.members.length;
     state.detailNote = state.detail.members.length ? "" : "Nobody yet.";
   } catch (err) {
     if (err.status === 401) return toProfile();

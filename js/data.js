@@ -1044,9 +1044,11 @@ const VENUE_COORDS = {
   "The Boathouse, Victoria Park": [43.4468, -80.4949],
 };
 
+/* The id carries the day, so the circle for today's movie night is not
+   shown on tomorrow's. Live listings already have per-day ids. */
 export const SEED_EVENTS = RAW_EVENTS.map((e) => {
   const c = VENUE_COORDS[e.venue] || [null, null];
-  return { ...e, lat: c[0], lng: c[1] };
+  return { ...e, id: `${e.id}@${D}`, lat: c[0], lng: c[1] };
 });
 
 
@@ -1200,6 +1202,26 @@ export async function geocode(query) {
   if (!hits.length) throw new Error("no match");
   const hit = hits[0];
   return { lat: Number(hit.lat), lng: Number(hit.lon), label: placeLabel(hit) };
+}
+
+/* Up to five candidates for what was typed, as a map search would offer:
+   the same lookup, more results, deduplicated by label. Only ever called
+   with what the user typed, at most once a second. */
+export async function suggestPlaces(query, limit = 8) {
+  const url = `${GEOCODE_URL}?format=json&addressdetails=1&limit=${limit}` +
+    `&countrycodes=ca&q=${encodeURIComponent(query)}`;
+  const r = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!r.ok) throw new Error(`geocoder ${r.status}`);
+  const hits = await r.json();
+  const seen = new Set();
+  return hits
+    .map((hit) => ({
+      lat: Number(hit.lat),
+      lng: Number(hit.lon),
+      label: placeLabel(hit),
+      detail: String(hit.display_name || "").split(",").slice(0, 4).join(",").trim()
+    }))
+    .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && !seen.has(p.label) && seen.add(p.label));
 }
 
 /* display_name is a full postal address and far too long for a label. */

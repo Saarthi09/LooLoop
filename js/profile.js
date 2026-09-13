@@ -1,5 +1,5 @@
 import {
-  session, saveSession, updateProfile, dropSession, api, safeNext, fmtWhen, esc
+  session, saveSession, updateProfile, dropSession, api, safeNext, fmtWhen, esc, clearAnswers
 } from "./api.js";
 
 const el = {
@@ -126,10 +126,12 @@ async function loadCircles() {
   }
 }
 
+/* Logging out is a clean slate: the session goes, the remembered answers
+   go, and the first question is shown fresh. */
 el.logout.addEventListener("click", () => {
   dropSession();
-  note(el.authNote, "You're signed out.", true);
-  render();
+  clearAnswers();
+  window.location.href = "./#start";
 });
 
 /* ---- boot ------------------------------------------------------------ */

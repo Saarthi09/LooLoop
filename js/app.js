@@ -1,9 +1,9 @@
 import {
-  loadEvents, SEED_USER, estimateTravel, geocode, similarity, fetchForecast, SAMPLE_FORECAST,
+  loadEvents, SEED_USER, estimateTravel, geocode, suggestPlaces, similarity, fetchForecast, SAMPLE_FORECAST,
   INTERESTS, CIRCUMSTANCES, BUDGETS, SCOPES, ART_PALETTES, QUICK_PLACES
 } from "./data.js";
 import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js";
-import { session, api, profileUrl, webUrl } from "./api.js";
+import { session, api, profileUrl, webUrl, ANSWERS_KEY, clearAnswers } from "./api.js";
 
 /* Single state object. Every handler mutates state, then calls render(). */
 const state = {
@@ -652,6 +652,7 @@ const el = {
   mainWizard: document.getElementById("main-wizard"),
   stepDone: document.getElementById("step-done"),
   navHome: document.getElementById("nav-home"),
+  startOver: document.getElementById("start-over"),
   home: document.getElementById("home"),
   stepCount: document.getElementById("step-count"),
   stepQ: document.getElementById("step-q"),
@@ -715,8 +716,10 @@ const STEPS = [
     body: () => `
       <p class="ask-origin" id="w-origin"></p>
       <div class="find">
-        <input type="search" id="w-place" placeholder="Street and city" aria-label="Search a place">
+        <input type="search" id="w-place" placeholder="Street and city" aria-label="Search a place"
+          autocomplete="off" role="combobox" aria-expanded="false" aria-controls="w-suggest" aria-autocomplete="list">
         <button type="button" class="btn" id="w-find">Find</button>
+        <ul class="suggest" id="w-suggest" role="listbox" aria-label="Places like what you typed" hidden></ul>
       </div>
       <button type="button" class="btn btn-wide" id="w-geo">Use my location</button>
       <p class="ask-note" id="w-geo-note"></p>
@@ -796,6 +799,7 @@ function mountWizard() {
 
   el.stepSkip.addEventListener("click", enterResults);
   el.stepDone.addEventListener("click", enterResults);
+  if (el.startOver) el.startOver.addEventListener("click", startOver);
 
   /* On this page "What's on" and the wordmark mean the results, not a
      reload that throws the answers away. */
@@ -861,12 +865,26 @@ function renderStep() {
 
 function wireStep(s) {
   if (s.id === "place") {
-    const go = () => findPlace(el.stepBody.querySelector("#w-place").value);
+    const input = el.stepBody.querySelector("#w-place");
+    const go = () => { closeSuggestions(); findPlace(input.value); };
     el.stepBody.querySelector("#w-find").addEventListener("click", go);
-    el.stepBody.querySelector("#w-place").addEventListener("keydown", (ev) => {
+    input.addEventListener("input", () => suggestFor(input.value));
+    input.addEventListener("keydown", (ev) => {
+      const open = suggestions.length && !el.stepBody.querySelector("#w-suggest").hidden;
+      if (ev.key === "ArrowDown" && open) { ev.preventDefault(); moveSuggestion(1); return; }
+      if (ev.key === "ArrowUp" && open) { ev.preventDefault(); moveSuggestion(-1); return; }
+      if (ev.key === "Escape" && open) { ev.preventDefault(); closeSuggestions(); return; }
       if (ev.key !== "Enter") return;
       ev.preventDefault();
+      if (open && suggestActive >= 0) return chooseSuggestion(suggestActive);
       go();
+    });
+    input.addEventListener("blur", () => setTimeout(closeSuggestions, 150));
+    el.stepBody.querySelector("#w-suggest").addEventListener("mousedown", (ev) => {
+      const li = ev.target.closest("[data-i]");
+      if (!li) return;
+      ev.preventDefault();          /* keep the input's blur from closing first */
+      chooseSuggestion(Number(li.dataset.i));
     });
     el.stepBody.querySelector("#w-geo").addEventListener("click", useMyLocation);
   }
@@ -878,7 +896,7 @@ function wireStep(s) {
       if (v == null) return;
       state.filters.windowStart = Math.min(v, state.filters.windowEnd - 0.25);
       fitSpan();
-      if (state.clockFallback) pickClock();
+      if (state.clockFallback || state.nowAuto) pickClock();
       updateStep();
     });
     to.addEventListener("change", () => {
@@ -886,7 +904,7 @@ function wireStep(s) {
       if (v == null) return;
       state.filters.windowEnd = Math.max(v, state.filters.windowStart + 0.25);
       fitSpan();
-      if (state.clockFallback) pickClock();
+      if (state.clockFallback || state.nowAuto) pickClock();
       updateStep();
     });
   }
@@ -991,8 +1009,6 @@ function syncHash(push) {
    with the same answers, not on question one. Only the answers are kept;
    nothing about who you are. */
 
-const ANSWERS_KEY = "looloop-answers";
-
 function saveAnswers() {
   try {
     localStorage.setItem(ANSWERS_KEY, JSON.stringify({
@@ -1041,12 +1057,96 @@ function pickClock() {
   state.nowManual = Math.max(span().start, Math.round((f.windowStart - 0.5) * 4) / 4);
 }
 
+/* ---- places like what you typed ---------------------------------------
+   As on a map search: from three characters on, a short list of matching
+   places drops under the input. Requests wait for a pause in typing and
+   never go out more than once a second, which is what the lookup service
+   asks for. A reply for an older query is dropped. */
+
+const SUGGEST_MIN = 3;
+const SUGGEST_PAUSE_MS = 350;
+const SUGGEST_GAP_MS = 1000;
+let suggestions = [];
+let suggestActive = -1;
+let suggestTimer = null;
+let suggestLastAt = 0;
+let suggestSeq = 0;
+
+function suggestFor(value) {
+  const q = String(value || "").trim();
+  clearTimeout(suggestTimer);
+  if (q.length < SUGGEST_MIN) return closeSuggestions();
+  const wait = Math.max(SUGGEST_PAUSE_MS, SUGGEST_GAP_MS - (Date.now() - suggestLastAt));
+  suggestTimer = setTimeout(async () => {
+    const mine = ++suggestSeq;
+    suggestLastAt = Date.now();
+    try {
+      const found = await suggestPlaces(q);
+      if (mine !== suggestSeq) return;
+      suggestions = found;
+      suggestActive = found.length ? 0 : -1;
+      renderSuggestions();
+    } catch (err) {
+      if (mine === suggestSeq) closeSuggestions();
+    }
+  }, wait);
+}
+
+function renderSuggestions() {
+  const list = el.stepBody.querySelector("#w-suggest");
+  const input = el.stepBody.querySelector("#w-place");
+  if (!list || !input) return;
+  if (!suggestions.length) return closeSuggestions();
+  list.innerHTML = suggestions.map((p, i) => `
+    <li role="option" id="w-suggest-${i}" data-i="${i}" class="${i === suggestActive ? "is-active" : ""}"
+        aria-selected="${i === suggestActive}">
+      <span class="suggest-label">${esc(p.label)}</span>
+      <span class="suggest-detail">${esc(p.detail)}</span>
+    </li>`).join("");
+  list.hidden = false;
+  input.setAttribute("aria-expanded", "true");
+  input.setAttribute("aria-activedescendant", suggestActive >= 0 ? `w-suggest-${suggestActive}` : "");
+}
+
+function moveSuggestion(step) {
+  if (!suggestions.length) return;
+  suggestActive = (suggestActive + step + suggestions.length) % suggestions.length;
+  renderSuggestions();
+}
+
+function closeSuggestions() {
+  clearTimeout(suggestTimer);
+  suggestions = [];
+  suggestActive = -1;
+  const list = el.stepBody.querySelector("#w-suggest");
+  const input = el.stepBody.querySelector("#w-place");
+  if (list) { list.hidden = true; list.innerHTML = ""; }
+  if (input) { input.setAttribute("aria-expanded", "false"); input.removeAttribute("aria-activedescendant"); }
+}
+
+function chooseSuggestion(i) {
+  const p = suggestions[i];
+  if (!p) return;
+  const input = el.stepBody.querySelector("#w-place");
+  if (input) input.value = p.label;
+  closeSuggestions();
+  originPick++;
+  suggestSeq++;
+  state.origin = { lat: p.lat, lng: p.lng, label: p.label };
+  state.travelSource = "estimated";
+  state.geo = { busy: false, note: null };
+  state.weather = null;
+  state.reflow = "stagger";
+  reloadEvents();
+}
+
 /* ---- location -------------------------------------------------------- */
 
 /* A new origin means a new feed: the server searches and measures from
    wherever the user is. A stale response for an origin the user already
    left is dropped. */
 let feedRequest = 0;
+let originPick = 0;   /* a slow lookup must not overwrite a later pick */
 
 async function reloadEvents() {
   const mine = ++feedRequest;
@@ -1065,6 +1165,7 @@ async function reloadEvents() {
 function pickPlace(id) {
   const q = QUICK_PLACES.find((x) => x.id === id);
   if (!q) return;
+  originPick++;
   state.origin = { lat: q.lat, lng: q.lng, label: q.label };
   state.travelSource = q.id === "phillip" ? "feed" : "estimated";
   state.geo = { busy: false, note: null };
@@ -1076,15 +1177,19 @@ function pickPlace(id) {
 async function findPlace(query) {
   const q = String(query || "").trim();
   if (!q) return;
+  const mine = ++originPick;
   state.geo = { busy: true, note: null };
   render();
   try {
-    state.origin = await geocode(q);
+    const found = await geocode(q);
+    if (mine !== originPick) return;
+    state.origin = found;
     state.travelSource = "estimated";
     state.geo = { busy: false, note: null };
     state.weather = null;
     reloadEvents();
   } catch (err) {
+    if (mine !== originPick) return;
     state.geo = {
       busy: false,
       note: err.message === "no match"
@@ -1120,6 +1225,7 @@ async function useMyLocation() {
   state.geo = { busy: true, note: null };
   render();
 
+  const mine = ++originPick;
   let settled = false;
   const watchdog = setTimeout(() => {
     if (settled) return;
@@ -1130,7 +1236,7 @@ async function useMyLocation() {
 
   navigator.geolocation.getCurrentPosition(
     (pos) => {
-      if (settled) return;
+      if (settled || mine !== originPick) return;
       settled = true;
       clearTimeout(watchdog);
       /* Coordinates stay in the page. Nothing is sent anywhere to name them. */
@@ -1146,7 +1252,7 @@ async function useMyLocation() {
       reloadEvents();
     },
     (err) => {
-      if (settled) return;
+      if (settled || mine !== originPick) return;
       settled = true;
       clearTimeout(watchdog);
       state.geo = {
@@ -1390,11 +1496,13 @@ function mountRail() {
 
   rail.winStart.addEventListener("input", () => {
     state.filters.windowStart = Math.min(Number(rail.winStart.value), state.filters.windowEnd - 0.25);
+    if (state.clockFallback || state.nowAuto) pickClock();
     state.reflow = "live";
     render();
   });
   rail.winEnd.addEventListener("input", () => {
     state.filters.windowEnd = Math.max(Number(rail.winEnd.value), state.filters.windowStart + 0.25);
+    if (state.clockFallback || state.nowAuto) pickClock();
     state.reflow = "live";
     render();
   });
@@ -1594,8 +1702,66 @@ function showTip(e, dot) {
   const h = el.tip.offsetHeight;
   const x = r.left + r.width / 2 - wrap.left;
   const above = r.top - wrap.top - h - 12;
+  const below = r.bottom - wrap.top + 12;
+  /* When it cannot sit above the dot it goes below, but never past the
+     bottom of the window: a hidden readout is no readout. */
+  const viewH = window.innerHeight || document.documentElement.clientHeight || Infinity;
+  const lastTop = viewH - wrap.top - h - 4;
   el.tip.style.left = `${clamp(x - w / 2, 4, Math.max(4, wrap.width - w - 4))}px`;
-  el.tip.style.top = `${above < 0 ? r.bottom - wrap.top + 12 : above}px`;
+  el.tip.style.top = `${above >= 0 ? above : Math.max(4 - wrap.top, Math.min(below, lastTop))}px`;
+}
+
+/* On a phone the answers follow the chart. Moving the node, rather than
+   reordering it with CSS, keeps keyboard and screen-reader order equal to
+   what is on screen. */
+const narrow = window.matchMedia("(max-width: 900px)");
+narrow.addEventListener("change", () => { if (state.status === "ready") render(); });
+
+function placeResultsPanel() {
+  const side = document.querySelector(".side");
+  const wantOutside = narrow.matches && state.screen === "results";
+  const outside = el.sideResults.parentElement === el.shell;
+  if (wantOutside && !outside) el.shell.appendChild(el.sideResults);
+  else if (!wantOutside && outside) side.appendChild(el.sideResults);
+}
+
+/* ---- start over --------------------------------------------------------
+   The homepage button, and what a logout lands on: the answers go, the
+   defaults come back, the feed is fetched for the default origin, and the
+   first question is shown. */
+
+function defaultFilters() {
+  return {
+    windowStart: 18.5,
+    windowEnd: 21,
+    maxTravel: SEED_USER.maxTravelMinutes,
+    budget: SEED_USER.budget,
+    scope: SEED_USER.scope,
+    circumstances: [],
+    interests: []
+  };
+}
+
+function startOver() {
+  clearAnswers();
+  state.filters = defaultFilters();
+  state.origin = { ...SEED_USER.origin };
+  state.travelSource = "feed";
+  state.geo = { busy: false, note: null };
+  state.weather = null;
+  state.forceRain = false;
+  state.spanId = "evening";
+  state.selectedId = null;
+  state.hoverId = null;
+  state.returnTo = null;
+  state.screen = "wizard";
+  state.step = 0;
+  builtStep = -1;
+  originPick++;
+  pickClock();
+  syncHash(true);
+  render();
+  reloadEvents();
 }
 
 /* ---- render ---------------------------------------------------------- */
@@ -1618,6 +1784,7 @@ function render() {
   el.mainResults.hidden = onWizard;
   el.shell.classList.toggle("is-wizard", onWizard);
   el.shell.classList.toggle("is-results", !onWizard);
+  placeResultsPanel();
   if (el.navProfile) el.navProfile.textContent = session()?.profile?.username || "Log in";
   if (state.clockFallback) pickClock();
   saveAnswers();
@@ -1685,6 +1852,13 @@ function esc(s) {
 }
 
 /* ---- boot ------------------------------------------------------------ */
+
+/* #start is where the other pages send someone who wants a clean slate:
+   forget the answers before anything is read back. */
+if (window.location.hash === "#start") {
+  clearAnswers();
+  window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#q1`);
+}
 
 /* Remembered answers first, so the very first feed request already asks
    about the place the user was last at. */

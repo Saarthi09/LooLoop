@@ -38,6 +38,14 @@ export function dropSession() {
   localStorage.removeItem(SESSION_KEY);
 }
 
+/* The questionnaire answers the main page remembers. Logging out, and the
+   Start over button, forget them. */
+export const ANSWERS_KEY = "looloop-answers";
+
+export function clearAnswers() {
+  try { localStorage.removeItem(ANSWERS_KEY); } catch (err) { /* nothing to clear */ }
+}
+
 /* Where to send someone to sign in, and where to bring them back to.
    Only a path on this site is ever followed back. */
 export function profileUrl(next = window.location.pathname + window.location.search) {

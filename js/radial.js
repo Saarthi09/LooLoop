@@ -39,9 +39,9 @@ export const hourLabel = (h) => {
 };
 
 export const fmtClock = (h) => {
-  const hh = Math.floor(h), mm = Math.round((h - hh) * 60);
+  const raw = Math.floor(h), hh = raw % 24, mm = Math.round((h - raw) * 60);
   const half = hh % 12 === 0 ? 12 : hh % 12;
-  return `${half}:${String(mm).padStart(2, "0")} ${hh < 12 || hh === 24 ? "am" : "pm"}`;
+  return `${half}:${String(mm).padStart(2, "0")} ${hh < 12 ? "am" : "pm"}`;
 };
 
 /* Enough ticks to read the clock, few enough to stay legible. */
