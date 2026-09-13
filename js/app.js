@@ -1043,6 +1043,25 @@ function pickClock() {
 
 /* ---- location -------------------------------------------------------- */
 
+/* A new origin means a new feed: the server searches and measures from
+   wherever the user is. A stale response for an origin the user already
+   left is dropped. */
+let feedRequest = 0;
+
+async function reloadEvents() {
+  const mine = ++feedRequest;
+  state.feed = { ...state.feed, note: `Looking for what's on near ${state.origin.label}.` };
+  render();
+  const { events, feed } = await loadEvents(state.origin);
+  if (mine !== feedRequest) return;
+  state.events = events;
+  state.feed = feed;
+  state.selectedId = null;
+  state.hoverId = null;
+  render();
+  loadCircleCounts();
+}
+
 function pickPlace(id) {
   const q = QUICK_PLACES.find((x) => x.id === id);
   if (!q) return;
@@ -1051,7 +1070,7 @@ function pickPlace(id) {
   state.geo = { busy: false, note: null };
   state.weather = null;
   state.reflow = "stagger";
-  render();
+  reloadEvents();
 }
 
 async function findPlace(query) {
@@ -1063,6 +1082,8 @@ async function findPlace(query) {
     state.origin = await geocode(q);
     state.travelSource = "estimated";
     state.geo = { busy: false, note: null };
+    state.weather = null;
+    reloadEvents();
   } catch (err) {
     state.geo = {
       busy: false,
@@ -1122,7 +1143,7 @@ async function useMyLocation() {
       state.geo = { busy: false, note: null };
       state.weather = null;
       state.reflow = "stagger";
-      render();
+      reloadEvents();
     },
     (err) => {
       if (settled) return;
@@ -1597,7 +1618,7 @@ function render() {
   el.mainResults.hidden = onWizard;
   el.shell.classList.toggle("is-wizard", onWizard);
   el.shell.classList.toggle("is-results", !onWizard);
-  if (el.navProfile) el.navProfile.textContent = session()?.profile?.username || "Profile";
+  if (el.navProfile) el.navProfile.textContent = session()?.profile?.username || "Log in";
   if (state.clockFallback) pickClock();
   saveAnswers();
 
@@ -1665,7 +1686,11 @@ function esc(s) {
 
 /* ---- boot ------------------------------------------------------------ */
 
-loadEvents()
+/* Remembered answers first, so the very first feed request already asks
+   about the place the user was last at. */
+const answered = loadAnswers();
+
+loadEvents(state.origin)
   .then(({ events, feed }) => {
     state.events = events;
     state.feed = feed;
@@ -1676,7 +1701,6 @@ loadEvents()
 
     /* Where to open: the address bar wins, then remembered answers land on
        the results, otherwise question one. */
-    const answered = loadAnswers();
     const at = readHash();
     if (at?.screen === "wizard") {
       state.step = at.step;

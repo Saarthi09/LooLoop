@@ -149,7 +149,7 @@ const hoursBetween = (a, b) => (new Date(b) - new Date(a)) / 3600000;
 
 /* ---- geography ------------------------------------------------------- */
 
-function distanceKm(a, b) {
+export function distanceKm(a, b) {
   const R = 6371;
   const toRad = (deg) => (deg * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);
@@ -238,7 +238,7 @@ function plainText(html, max = 160) {
 
 /* ---- providers ------------------------------------------------------- */
 
-export function normalizeTicketmaster(event) {
+export function normalizeTicketmaster(event, origin = ORIGIN) {
   const startsAt = event.dates?.start?.dateTime;
   if (!startsAt) return null; /* a listing with no time cannot sit on a clock */
   const venue = event._embedded?.venues?.[0] || {};
@@ -264,7 +264,7 @@ export function normalizeTicketmaster(event) {
     endsAt: event.dates?.end?.dateTime || plusMinutes(startsAt, 150),
     lat: point.lat,
     lng: point.lng,
-    ...travelFrom(ORIGIN, point),
+    ...travelFrom(origin, point),
     price,
     currency: event.priceRanges?.[0]?.currency || "CAD",
     costTier: costTierFor(price),
@@ -279,7 +279,7 @@ export function normalizeTicketmaster(event) {
   };
 }
 
-export function normalizeWaterloo(event) {
+export function normalizeWaterloo(event, origin = ORIGIN) {
   if (!event.eventStartDate) return null;
   const startsAt = asUtc(event.eventStartDate);
   const point = campusPoint(event.locationName);
@@ -303,7 +303,7 @@ export function normalizeWaterloo(event) {
     endsAt,
     lat: point.lat,
     lng: point.lng,
-    ...travelFrom(ORIGIN, point),
+    ...travelFrom(origin, point),
     price,
     currency: "CAD",
     costTier: costTierFor(price),
@@ -341,7 +341,7 @@ function priceFromText(text) {
   return { price: null, studentPrice: false };
 }
 
-export function normalizeWusa(event) {
+export function normalizeWusa(event, origin = ORIGIN) {
   if (!event.startsAt) return null;
   const endsAt =
     event.endsAt && new Date(event.endsAt) > new Date(event.startsAt)
@@ -373,7 +373,7 @@ export function normalizeWusa(event) {
     endsAt,
     lat: point.lat,
     lng: point.lng,
-    ...travelFrom(ORIGIN, point),
+    ...travelFrom(origin, point),
     price,
     currency: "CAD",
     costTier: costTierFor(price),
@@ -390,13 +390,15 @@ export function normalizeWusa(event) {
 
 /* ---- the feed -------------------------------------------------------- */
 
-/* circles: Map of event id to how many students have joined its circle. */
-export function buildFeed({ date, ticketmaster = [], waterloo = [], wusa = [], circles = new Map() }) {
+/* circles: Map of event id to how many students have joined its circle.
+   origin: where travel is measured from; the caller's location, or the
+   student housing default. */
+export function buildFeed({ date, ticketmaster = [], waterloo = [], wusa = [], circles = new Map(), origin = ORIGIN }) {
   const seen = new Set();
   return [
-    ...wusa.map(normalizeWusa),
-    ...waterloo.map(normalizeWaterloo),
-    ...ticketmaster.map(normalizeTicketmaster),
+    ...wusa.map((e) => normalizeWusa(e, origin)),
+    ...waterloo.map((e) => normalizeWaterloo(e, origin)),
+    ...ticketmaster.map((e) => normalizeTicketmaster(e, origin)),
   ]
     .filter((e) => e && localDateOf(e.startsAt) === date)
     .filter((e) => (seen.has(e.id) ? false : seen.add(e.id)))

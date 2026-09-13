@@ -148,7 +148,7 @@ function renderDetail() {
 }
 
 function render() {
-  el.navProfile.textContent = session()?.profile?.username || "Profile";
+  el.navProfile.textContent = session()?.profile?.username || "Log in";
   if (state.error) {
     el.h.textContent = "Circles are unavailable";
     el.sub.textContent = state.error;

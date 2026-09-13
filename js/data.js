@@ -1097,10 +1097,21 @@ function fromFeed(e) {
    live ones, and the note says exactly that. */
 const USABLE_FLOOR = 8;
 
-export async function loadEvents() {
+/* The feed is asked for listings around wherever the user is, and the
+   server measures travel from there too. The sample set is Waterloo's,
+   so it only ever joins a thin feed when the user is near Waterloo;
+   anywhere else the live feed stands alone, however thin. */
+const WATERLOO = { lat: 43.4760, lng: -80.5397 };
+const NEAR_WATERLOO_KM = 40;
+const FEED_RADIUS_KM = 60;
+
+export async function loadEvents(origin = SEED_USER.origin) {
   if (!USE_API) return SAMPLE_FEED("Sample listings.");
+  const near = distanceKm(origin, WATERLOO) <= NEAR_WATERLOO_KM;
+  const where = origin.label ? ` near ${origin.label}` : "";
   try {
-    const r = await fetch(`${API_URL}?date=${D}`, { headers: { Accept: "application/json" } });
+    const qs = `?date=${D}&lat=${origin.lat.toFixed(4)}&lng=${origin.lng.toFixed(4)}&radius=${FEED_RADIUS_KM}`;
+    const r = await fetch(`${API_URL}${qs}`, { headers: { Accept: "application/json" } });
     if (!r.ok) throw new Error(`events ${r.status}`);
     const j = await r.json();
     const live = (Array.isArray(j) ? j : j.events || []).map(fromFeed);
@@ -1108,7 +1119,20 @@ export async function loadEvents() {
     const usable = live.filter((e) => e.travelMinutes <= 60).length;
 
     if (usable >= USABLE_FLOOR) {
-      return { events: live, feed: { live: true, note: `Live listings for today${from ? ` from ${from}` : ""}.` } };
+      return { events: live, feed: { live: true, note: `Live listings${where} today${from ? ` from ${from}` : ""}.` } };
+    }
+    if (!near) {
+      const n = live.length;
+      return {
+        events: live,
+        feed: {
+          live: n > 0,
+          thin: true,
+          note: n
+            ? `${n} live listing${n === 1 ? "" : "s"}${where} today${from ? ` from ${from}` : ""}.`
+            : `Nothing on the feed${where} today. Try a bigger city, or another day with ?date=.`
+        }
+      };
     }
     if (!live.length) {
       return SAMPLE_FEED("The live feed has nothing on for today, so these are sample listings.");

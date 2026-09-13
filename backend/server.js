@@ -7,6 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 import { rankEventsWithGemini } from "./services/gemini.js";
 import {
   buildFeed,
+  distanceKm,
   isDateString,
   localDateOf,
   stamp,
@@ -301,15 +302,35 @@ async function getCircleCounts() {
 // calendar, Waterloo Events, and Ticketmaster around the region. A
 // provider that fails is reported in `warnings` rather than failing the
 // whole feed, and `sources` names only the providers that contributed.
+// Where the feed looks and measures from. The front-end sends the user's
+// origin; without one the student housing default stands. The campus
+// calendars only make sense within reach of campus.
+const WATERLOO = { lat: 43.476, lng: -80.5397 };
+const CAMPUS_REACH_KM = 60;
+
+function originOf(query) {
+  const lat = Number(query.lat);
+  const lng = Number(query.lng);
+  const ok = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+  const radius = Number(query.radius);
+  return {
+    lat: ok ? lat : WATERLOO.lat,
+    lng: ok ? lng : WATERLOO.lng,
+    radiusKm: Number.isFinite(radius) ? Math.min(Math.max(Math.round(radius), 5), 300) : eventsRadiusKm,
+  };
+}
+
 app.get("/api/events", async (req, res) => {
   const date = isDateString(req.query.date)
     ? req.query.date
     : localDateOf(new Date());
   const { start, end } = torontoDayRange(date);
+  const origin = originOf(req.query);
+  const nearCampus = distanceKm(origin, WATERLOO) <= CAMPUS_REACH_KM;
   const ticketmasterRequest = {
     query: {
-      latlong: "43.4643,-80.5204",
-      radius: String(eventsRadiusKm),
+      latlong: `${origin.lat.toFixed(4)},${origin.lng.toFixed(4)}`,
+      radius: String(origin.radiusKm),
       unit: "km",
       countryCode: "CA",
       startDateTime: stamp(start),
@@ -318,9 +339,9 @@ app.get("/api/events", async (req, res) => {
   };
 
   const [wusa, ticketmaster, waterloo, circles] = await Promise.allSettled([
-    fetchWusaEvents(),
+    nearCampus ? fetchWusaEvents() : Promise.resolve([]),
     getTicketmasterEvents(ticketmasterRequest, 100),
-    fetchWaterlooEvents(25), // the API's documented maximum
+    nearCampus ? fetchWaterlooEvents(25) : Promise.resolve([]), // the API's documented maximum
     getCircleCounts(),
   ]);
 
@@ -344,10 +365,17 @@ app.get("/api/events", async (req, res) => {
     ticketmaster: ticketmaster.value || [],
     waterloo: waterloo.value || [],
     circles: circles.value || new Map(),
+    origin,
   });
   const sources = [...new Set(events.map((event) => event.source.name))];
 
-  res.json({ date, events, sources, warnings });
+  res.json({
+    date,
+    origin: { lat: origin.lat, lng: origin.lng, radiusKm: origin.radiusKm, nearCampus },
+    events,
+    sources,
+    warnings,
+  });
 });
 
 app.get("/api/health", (_req, res) => {
