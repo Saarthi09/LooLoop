@@ -1392,3 +1392,186 @@ body {
 }
 
 .nowbox .link-deep { display: inline-block; margin-top: 10px; }
+
+/* ---- talking to it ------------------------------------------------------
+   The voice screen borrows the question screen's furniture: deep panel on
+   the left for the asking, paper on the right for what it has understood
+   and what is still open. */
+
+.mic-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.mic {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 22px 13px 18px;
+  border: 1px solid var(--hair-deep);
+  border-radius: 999px;
+  background: var(--deep-2);
+  color: var(--on-deep);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background var(--t) var(--ease), color var(--t) var(--ease);
+}
+
+.mic:hover:not(:disabled) { background: #1d3b36; }
+.mic:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mic:disabled { cursor: default; }
+.mic.is-off { opacity: 0.5; }
+
+.mic-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--on-deep-2);
+  flex: none;
+}
+
+.mic.is-live {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+.mic.is-live .mic-dot {
+  background: #fff;
+  animation: mic-pulse 1.1s infinite var(--ease);
+}
+.mic.is-busy { opacity: 0.75; }
+.mic.is-busy .mic-dot { animation: mic-fade 0.9s infinite var(--ease); }
+
+@keyframes mic-pulse {
+  0%   { transform: scale(0.7); opacity: 0.55; }
+  50%  { transform: scale(1.3);  opacity: 1; }
+  100% { transform: scale(0.7); opacity: 0.55; }
+}
+@keyframes mic-fade {
+  0%, 100% { opacity: 0.3; }
+  50%      { opacity: 1; }
+}
+
+.mic-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--on-deep-2);
+}
+.mic-note:empty { display: none; }
+
+.voice-said {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.3;
+  color: var(--on-deep);
+}
+.voice-said:empty { display: none; }
+
+.heard { display: flex; flex-wrap: wrap; gap: 6px; }
+.heard:empty { display: none; }
+
+.heard-chip {
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: var(--deep-2);
+  font-size: 12.5px;
+  color: var(--on-deep);
+}
+
+.voice-type { display: flex; gap: 8px; }
+
+.voice-type input {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 13px;
+  border: 1px solid var(--hair-deep);
+  border-radius: var(--r-sm);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--on-deep);
+  font: inherit;
+  font-size: 14px;
+}
+.voice-type input::placeholder { color: var(--on-deep-2); }
+.voice-type input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.voice-type .btn { border-color: var(--hair-deep); color: var(--on-deep); }
+.voice-type .btn:hover { background: var(--deep-2); }
+
+/* ---- the right-hand side: what is still open ---------------------------- */
+
+.main-voice {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 30px;
+  min-height: calc(100vh - 78px);
+  padding-top: 52px;
+}
+
+.voice-lead { max-width: 54ch; }
+
+.voice-kicker {
+  margin: 0 0 6px 0;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.voice-echo {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+
+.voice-open { flex: 1 0 auto; }
+
+.open-grid {
+  max-width: 560px;
+  margin: 26px 0 0 0;
+  border-top: 1px solid var(--hair);
+}
+
+.open-row {
+  display: grid;
+  grid-template-columns: 74px 1fr auto;
+  gap: 12px;
+  align-items: baseline;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--hair);
+}
+
+.open-k {
+  font-size: 11.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.open-v { font-size: 15px; color: var(--ink-3); }
+.open-s { font-size: 11.5px; color: var(--ink-3); }
+
+.open-row.is-set .open-v { color: var(--ink); font-weight: 500; }
+.open-row.is-set .open-s { color: var(--accent-ink); font-weight: 500; }
+
+.open-note {
+  max-width: 54ch;
+  margin: 14px 0 0 0;
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+
+.open-eg { margin-top: 26px; }
+
+/* An answer nobody gave reads as quieter than one they did. */
+.answer.is-any dd { color: var(--on-deep-2); }
+
+@media (max-width: 900px) {
+  .main-voice { min-height: 0; padding-top: 22px; }
+  .open-row { grid-template-columns: 64px 1fr; }
+  .open-s { grid-column: 2; }
+}

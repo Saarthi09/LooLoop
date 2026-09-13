@@ -40,7 +40,10 @@ export function dropSession() {
 
 /* The questionnaire answers the main page remembers. Logging out, and the
    Start over button, forget them. */
-export const ANSWERS_KEY = "looloop-answers";
+/* Versioned: answers saved before voice carried the old defaults (a free
+   budget, a 30 minute cap, half six to nine) and would come back as
+   filters nobody had asked for. Bumping the key retires them. */
+export const ANSWERS_KEY = "looloop-answers-2";
 
 export function clearAnswers() {
   try { localStorage.removeItem(ANSWERS_KEY); } catch (err) { /* nothing to clear */ }

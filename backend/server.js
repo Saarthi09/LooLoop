@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { rankEventsWithGemini } from "./services/gemini.js";
+import { interpretWithGemini, GeminiError } from "./services/gemini-reader.js";
 import {
   buildFeed,
   distanceKm,
@@ -406,8 +407,91 @@ app.get("/api/health", (_req, res) => {
     ticketmasterConnected: Boolean(ticketmasterKey),
     uWaterlooConnected: Boolean(uWaterlooKey),
     geminiConnected: Boolean(geminiKey),
+    voiceConnected: Boolean(geminiKey),
+    voiceProvider: geminiKey ? "gemini" : null,
     profilesConnected: Boolean(supabaseUrl && supabaseSecretKey),
     wusaCalendar: true,
+  });
+});
+
+// ---- what someone said, as filters --------------------------------------
+// Two ways in. A recording arrives as a raw audio body, which is the normal
+// path: Gemini transcribes and interprets it in one call. Text arrives as
+// JSON, which is the typed fallback and the way the check script works.
+// Either way the answer is the same shape, and thread_id comes back so the
+// next thing said is understood against this one.
+
+const audioBody = express.raw({
+  type: ["audio/*", "video/webm", "application/octet-stream"],
+  limit: "24mb",
+});
+
+function interpretContext(query = {}) {
+  const day = String(query.today || "");
+  const hour = Number(query.now);
+  return {
+    today: /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : localDateOf(new Date()),
+    now: Number.isFinite(hour) ? Math.round(hour) : new Date().getHours(),
+    place: String(query.place || "").slice(0, 80) || null,
+    threadId: String(query.threadId || "").slice(0, 80) || null,
+  };
+}
+
+// Gemini takes the recording inline and answers with the filters in the
+// same call, so transcription is not a separate step or a separate bill.
+// The page keeps its own parser behind this, so a failure here is a
+// wobble rather than an outage.
+async function runInterpret(res, { audio, mimeType, text, ctx }) {
+  if (!geminiKey) {
+    return res.status(503).json({
+      error: "Voice is not configured on the server.",
+      reason: "no-key",
+    });
+  }
+  try {
+    const out = await interpretWithGemini({
+      apiKey: geminiKey,
+      audio,
+      mimeType,
+      text,
+      today: ctx.today,
+      now: ctx.now,
+      place: ctx.place,
+    });
+    return res.json({ ...out, mode: "gemini" });
+  } catch (error) {
+    const status = error instanceof GeminiError ? error.status || 502 : 502;
+    console.error("Voice interpret failed:", error.message);
+    // The page has its own parser; telling it plainly to use that is better
+    // than a spinner that never ends.
+    return res.status(status).json({
+      error: error.message,
+      reason: status === 504 ? "timeout"
+        : status === 401 || status === 403 ? "bad-key"
+          : status === 429 ? "rate-limit"
+            : "upstream",
+    });
+  }
+}
+
+app.post("/api/interpret/audio", audioBody, async (req, res) => {
+  const audio = Buffer.isBuffer(req.body) ? req.body : null;
+  if (!audio || !audio.length) {
+    return res.status(400).json({ error: "No audio arrived.", reason: "empty" });
+  }
+  return runInterpret(res, {
+    audio,
+    mimeType: req.get("content-type") || "audio/webm",
+    ctx: interpretContext(req.query),
+  });
+});
+
+app.post("/api/interpret", async (req, res) => {
+  const text = String(req.body?.text || "").trim().slice(0, 2000);
+  if (!text) return res.status(400).json({ error: "Nothing was said.", reason: "empty" });
+  return runInterpret(res, {
+    text,
+    ctx: interpretContext({ ...req.query, ...req.body }),
   });
 });
 

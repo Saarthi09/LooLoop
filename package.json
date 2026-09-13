@@ -6,5 +6,8 @@
     "postinstall": "npm --prefix backend install",
     "start": "node backend/server.js",
     "dev": "node --watch backend/server.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.116.0"
   }
 }

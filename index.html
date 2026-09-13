@@ -7,8 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/tokens.css?v=29">
-<link rel="stylesheet" href="css/app.css?v=29">
+<link rel="stylesheet" href="css/tokens.css?v=30">
+<link rel="stylesheet" href="css/app.css?v=30">
 </head>
 <body>
   <!-- One shell for every page: the deep side panel, then the main column. -->
@@ -22,6 +22,34 @@
           <a href="profile.html" id="nav-profile">Log in</a>
           <button type="button" class="link link-deep side-start" id="start-over">Start over</button>
         </nav>
+      </div>
+
+      <!-- what someone said, however they said it -->
+      <div class="side-body" id="side-voice" hidden>
+        <p class="step-count" id="voice-count">Talking</p>
+        <h1 class="step-q" id="voice-q">So. What do you feel like doing?</h1>
+        <p class="step-hint" id="voice-hint">Say it however you like. Whatever you leave out stays open.</p>
+
+        <div class="mic-wrap">
+          <button type="button" class="mic" id="mic">
+            <span class="mic-dot" aria-hidden="true"></span>
+            <span id="mic-label">Talk</span>
+          </button>
+          <p class="mic-note" id="mic-note"></p>
+        </div>
+
+        <p class="voice-said" id="voice-transcript"></p>
+        <div class="heard" id="voice-heard"></div>
+
+        <div class="step-live">
+          <p class="step-live-n" id="voice-live-n">0</p>
+          <p class="step-live-t" id="voice-live-t"></p>
+        </div>
+
+        <form class="voice-type" id="voice-form">
+          <input id="voice-text" placeholder="or type it" autocomplete="off" aria-label="Type what you are after">
+          <button type="submit" class="btn">Send</button>
+        </form>
       </div>
 
       <!-- one question at a time -->
@@ -44,6 +72,20 @@
     </aside>
 
     <main class="main">
+      <section class="main-voice" id="main-voice" hidden>
+        <div class="voice-lead">
+          <p class="voice-kicker" id="voice-kicker">Tell it what you are after</p>
+          <p class="voice-echo" id="voice-echo">Anything you do not mention stays wide open. Only what you say is used to rule things out.</p>
+        </div>
+
+        <div class="voice-open" id="voice-open"></div>
+
+        <div class="step-nav">
+          <button type="button" class="btn btn-go" id="voice-done">Show me what's on</button>
+          <button type="button" class="link" id="voice-chips">Use the questions instead</button>
+        </div>
+      </section>
+
       <section class="main-wizard" id="main-wizard" hidden>
         <div class="step-body" id="step-body"></div>
         <div class="step-nav">
@@ -77,6 +119,6 @@
     </main>
   </div>
 
-  <script type="module" src="js/app.js?v=29"></script>
+  <script type="module" src="js/app.js?v=30"></script>
 </body>
 </html>

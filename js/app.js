@@ -1,9 +1,11 @@
 import {
   loadEvents, SEED_USER, estimateTravel, distanceKm, geocode, suggestPlaces, similarity, fetchForecast, SAMPLE_FORECAST,
   INTERESTS, CIRCUMSTANCES, BUDGETS, RANGES, MODES, ART_PALETTES, QUICK_PLACES, TODAY, WANTED_DATE, isCalendarDate
-} from "./data.js?v=29";
-import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js?v=29";
-import { session, api, profileUrl, webUrl, ANSWERS_KEY, clearAnswers } from "./api.js?v=29";
+} from "./data.js?v=30";
+import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js?v=30";
+import { session, api, profileUrl, webUrl, ANSWERS_KEY, clearAnswers } from "./api.js?v=30";
+import { interpret, mergeReading, emptyReading, nextQuestion, summarize, textScore } from "./interpret.js?v=30";
+import { createVoice, canRecord, canListenInBrowser, isBillingRefusal, micTrouble, SPEECH_NOTE, READER } from "./voice.js?v=30";
 
 /* Single state object. Every handler mutates state, then calls render(). */
 const state = {
@@ -13,8 +15,17 @@ const state = {
   feed: { live: false, note: "" },   // where the listings came from
   joining: null,             // event id with a circle request in flight
   circleNote: null,          // { id, text } shown under one card
-  screen: "wizard",          // wizard | results
+  screen: "voice",           // voice | wizard | results
   step: 0,
+  reading: emptyReading(),   // what was said, however it was said
+  voice: {                   // the microphone and the conversation so far
+    phase: "idle",           // idle | listening | thinking
+    note: null,
+    turns: 0,
+    asked: [],
+    mode: null,              // gemini | local, whichever answered
+    ask: null
+  },
   date: WANTED_DATE || TODAY, // the day being planned
   returnTo: null,            // "results" while editing one answer from the results
   clockFallback: false,      // true when the real clock is past the window and we pretend
@@ -31,21 +42,36 @@ const state = {
   selectedId: null,
   hoverId: null,
   reflow: "stagger",         // stagger | live, set by the control that moved
+  /* null is "they did not say", and it filters nothing. Only an answer
+     someone actually gave is allowed to rule an event out. */
   filters: {
-    windowStart: 18.5,
-    windowEnd: 21,
-    maxTravel: SEED_USER.maxTravelMinutes,
-    budget: SEED_USER.budget,
-    range: SEED_USER.range,
-    mode: SEED_USER.mode,
+    windowStart: null,
+    windowEnd: null,
+    maxTravel: null,
+    budget: null,
+    range: null,
+    mode: "auto",
     circumstances: [],
-    interests: []
+    interests: [],
+    interestWeights: {}
   }
 };
 
 const span = () => SPANS[state.spanId];
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-const budgetMax = (id) => (BUDGETS.find((b) => b.id === id) || BUDGETS[3]).max;
+/* No budget said means no ceiling, not the cheapest bracket. */
+const budgetMax = (id) => (id == null ? Infinity : (BUDGETS.find((b) => b.id === id) || BUDGETS[3]).max);
+
+/* The chart still needs an outer ring and a wedge even when nobody has
+   named a distance or an hour. These are what it draws with; they are
+   never what it filters with. */
+const NOMINAL_TRAVEL = 45;
+const travelCap = () => state.filters.maxTravel
+  ?? Math.max(60, ...state.events.map((e) => e.travelMinutes || 0));
+const windowOf = () => ({
+  start: state.filters.windowStart ?? span().start,
+  end: state.filters.windowEnd ?? span().end
+});
 const labelOf = (list, id) => (list.find((x) => x.id === id) || {}).label || id;
 const toggled = (list, v) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 const has = (e, c) => e.circumstances.includes(c);
@@ -146,8 +172,9 @@ function decorate(events, f) {
       missed,
       catchable,
       userOk,
-      inWindow: h >= f.windowStart && h <= f.windowEnd,
-      reachable: travel <= f.maxTravel,
+      /* An hour or a distance nobody mentioned rules nothing out. */
+      inWindow: f.windowStart == null || (h >= f.windowStart && h <= f.windowEnd),
+      reachable: f.maxTravel == null || travel <= f.maxTravel,
       passes: userOk && catchable
     };
   }).sort((a, b) => a.hour - b.hour || a.travelMinutes - b.travelMinutes);
@@ -179,28 +206,49 @@ function chipCount(kind, value, on) {
 
 /* ---- how well this answers what was asked for ------------------------ */
 
+/* Interests are weighted, not on or off: "chill" is mostly wellness, a bit
+   of art, a bit of food, and each of those pulls by its own weight. What a
+   listing says about itself counts too, so a word the taxonomy has never
+   had still finds its event. */
 function interestFit(e) {
-  const want = state.filters.interests;
+  const r = state.reading;
+  const weights = state.filters.interestWeights;
+  const ids = Object.keys(weights);
   let best = 0, near = 0;
-  for (const w of want) {
+  for (const id of ids) {
     let s = 0;
-    for (const t of e.tags) s = Math.max(s, similarity(w, t));
-    best = Math.max(best, s);
-    if (s >= 0.5) near++;
+    for (const t of e.tags) s = Math.max(s, similarity(id, t));
+    const v = s * weights[id];
+    best = Math.max(best, v);
+    if (v >= 0.45) near++;
   }
-  /* Mostly the closest single hit, partly how much of the ask it covers. */
-  return 0.8 * best + 0.2 * (near / want.length);
+  let fit = ids.length ? 0.8 * best + 0.2 * (near / ids.length) : 0;
+
+  fit = Math.max(fit, textScore(e, r.keywords) * 0.92);
+
+  /* a word said inside a refusal pushes its listings down */
+  if (r.avoid?.length) fit *= 1 - 0.75 * textScore(e, r.avoid);
+
+  for (const [id, k] of Object.entries(r.vetoes || {})) {
+    let s = 0;
+    for (const t of e.tags) s = Math.max(s, similarity(id, t));
+    fit *= 1 - 0.9 * k * s;
+  }
+  return clamp(fit, 0, 1);
 }
 
 function timeFit(e) {
   if (e.inWindow) return 1;
   const f = state.filters;
+  if (f.windowStart == null) return 1;
   const out = e.hour < f.windowStart ? f.windowStart - e.hour : e.hour - f.windowEnd;
   return Math.max(0, 1 - out / 3);
 }
 
+/* With no distance named there is no cap to measure against, so near still
+   beats far by being measured against a normal trip across town. */
 const travelFit = (e) =>
-  Math.max(0, 1 - (e.travelMinutes / Math.max(1, state.filters.maxTravel)) * 0.85);
+  Math.max(0, 1 - (e.travelMinutes / Math.max(1, state.filters.maxTravel ?? NOMINAL_TRAVEL)) * 0.85);
 
 function moneyFit(e) {
   if (e.price === 0) return 1;
@@ -233,21 +281,29 @@ function weatherFit(e) {
   return clamp(base * (1 - rain * 0.85) - cold * 0.3, 0, 1);
 }
 
+/* A stated requirement has already filtered; this is how well the softer
+   half of what was said is met. "Chill" moves the quiet things up without
+   ruling the loud ones out. */
 function circFit(e) {
   const want = state.filters.circumstances;
-  if (!want.length) return 1;
-  return want.filter((c) => has(e, c)).length / want.length;
+  const soft = state.reading.prefers || [];
+  const hard = want.length ? want.filter((c) => has(e, c)).length / want.length : 1;
+  if (!soft.length) return hard;
+  return 0.5 * hard + 0.5 * (soft.filter((c) => has(e, c)).length / soft.length);
 }
 
 /* A weighted blend, so "close to what you asked for" beats "exactly it,
    but you cannot get there". */
+/* A specific answer leans on what was asked for. A vague one leans on what
+   is actually catchable, dry and near: being unspecific changes what decides
+   the order, it never empties the page. */
 function matchPct(e) {
-  const picked = state.filters.interests.length > 0;
-  const parts = picked
-    ? [[36, interestFit(e)], [16, timingFit(e)], [14, weatherFit(e)],
-       [10, timeFit(e)], [10, travelFit(e)], [8, moneyFit(e)], [6, circFit(e)]]
-    : [[24, timingFit(e)], [22, weatherFit(e)], [18, timeFit(e)],
-       [16, travelFit(e)], [12, moneyFit(e)], [8, circFit(e)]];
+  const vague = state.reading.broad || !Object.keys(state.filters.interestWeights).length;
+  const parts = vague
+    ? [[14, interestFit(e)], [24, timingFit(e)], [20, weatherFit(e)],
+       [16, timeFit(e)], [14, travelFit(e)], [8, moneyFit(e)], [8, circFit(e)]]
+    : [[36, interestFit(e)], [16, timingFit(e)], [14, weatherFit(e)],
+       [10, timeFit(e)], [10, travelFit(e)], [8, moneyFit(e)], [8, circFit(e)]];
   const total = parts.reduce((a, [w]) => a + w, 0);
   const value = parts.reduce((a, [w, v]) => a + w * v, 0) / total;
   return clamp(Math.round(value * 100), 4, 99);
@@ -305,9 +361,9 @@ function compat(e) {
   const f = state.filters;
   const rows = [];
 
-  if (f.interests.length) {
+  if (Object.keys(f.interestWeights).length) {
     let best = { w: null, sim: 0 };
-    for (const w of f.interests) {
+    for (const w of Object.keys(f.interestWeights)) {
       for (const t of e.tags) {
         const sim = similarity(w, t);
         if (sim > best.sim) best = { w, sim };
@@ -316,18 +372,18 @@ function compat(e) {
     const how = best.sim >= 0.99 ? "exactly" : best.sim >= 0.5 ? "close" : "not really";
     rows.push({ key: "into", label: "Into", score: interestFit(e), note: `${labelOf(INTERESTS, best.w)}, ${how}` });
   } else {
-    rows.push({ key: "into", label: "Into", score: null, note: "nothing picked" });
+    rows.push({ key: "into", label: "Into", score: null, note: "anything" });
   }
 
   rows.push({ key: "spend", label: "Spend", score: moneyFit(e), note: costLine(e).toLowerCase() });
-  rows.push({ key: "free", label: "Free", score: timeFit(e), note: e.inWindow ? "in your window" : "outside your window" });
+  rows.push({ key: "free", label: "Free", score: timeFit(e), note: f.windowStart == null ? "any time" : e.inWindow ? "in your window" : "outside your window" });
   rows.push({ key: "range", label: "Range", score: travelFit(e), note: `${e.travelMinutes} min ${modeWord(e.travelMode)}` });
 
   const met = f.circumstances.filter((c) => has(e, c)).length;
   rows.push({
     key: "needs", label: "Needs",
     score: f.circumstances.length ? circFit(e) : null,
-    note: f.circumstances.length ? `${met} of ${f.circumstances.length} met` : "none asked for"
+    note: f.circumstances.length ? `${met} of ${f.circumstances.length} met` : "any"
   });
 
   const w = weatherAt(e.hour);
@@ -695,6 +751,26 @@ const el = {
   stepSkip: document.getElementById("step-skip"),
   stepFeed: document.getElementById("step-feed"),
 
+  sideVoice: document.getElementById("side-voice"),
+  mainVoice: document.getElementById("main-voice"),
+  voiceQ: document.getElementById("voice-q"),
+  voiceHint: document.getElementById("voice-hint"),
+  voiceCount: document.getElementById("voice-count"),
+  mic: document.getElementById("mic"),
+  micLabel: document.getElementById("mic-label"),
+  micNote: document.getElementById("mic-note"),
+  voiceTranscript: document.getElementById("voice-transcript"),
+  voiceHeard: document.getElementById("voice-heard"),
+  voiceLiveN: document.getElementById("voice-live-n"),
+  voiceLiveT: document.getElementById("voice-live-t"),
+  voiceForm: document.getElementById("voice-form"),
+  voiceText: document.getElementById("voice-text"),
+  voiceOpen: document.getElementById("voice-open"),
+  voiceEcho: document.getElementById("voice-echo"),
+  voiceKicker: document.getElementById("voice-kicker"),
+  voiceDone: document.getElementById("voice-done"),
+  voiceChips: document.getElementById("voice-chips"),
+
   sideResults: document.getElementById("side-results"),
   mainResults: document.getElementById("main-results"),
   standfirst: document.getElementById("standfirst"),
@@ -726,6 +802,291 @@ const radial = createRadial(el.svg, {
 
 let revealing = false;
 let revealTimer = null;
+
+
+/* ---- talking to it ------------------------------------------------------
+   One open question, then only what is still missing, and never more than
+   two follow-ups. Everything has "any" behind it, so stopping at any point
+   is a complete answer: what was never said simply does not filter.
+
+   The recording goes to our own server, which holds the Gemini key; Gemini
+   transcribes it and reads it into filters in the same call, on the free
+   tier. If that cannot be reached, a typed sentence is read by
+   js/interpret.js here in the browser instead, so the page always moves. */
+
+const voice = createVoice({
+  onPhase: (phase) => {
+    state.voice.phase = phase;
+    paintMic();
+  }
+});
+
+const GO_WORDS = /\b(show me|that is it|that's it|thats it|go on then|let's go|lets go|i am done|im done|that is all|that's all|nothing else|just show me)\b/i;
+
+function paintMic() {
+  const p = state.voice.phase;
+  el.mic.classList.toggle("is-live", p === "listening");
+  el.mic.classList.toggle("is-busy", p === "thinking");
+  el.mic.disabled = p === "thinking";
+  el.micLabel.textContent = p === "listening" ? (state.voice.sttBlocked ? "Listening, tap when done" : "Stop and send")
+    : p === "thinking" ? "Working it out"
+      : state.voice.turns ? "Say something else" : "Talk";
+}
+
+function voiceContext() {
+  return {
+    today: state.date,
+    now: Math.round(nowHour()),
+    windowStart: state.filters.windowStart,
+    windowEnd: state.filters.windowEnd,
+    place: state.origin.label
+  };
+}
+
+/* Everything the reading says, written onto the filters. Anything it does
+   not say is left null, which is what makes it "any". */
+function applyReading() {
+  const r = state.reading;
+  const f = state.filters;
+  f.interestWeights = { ...r.weights };
+  f.interests = Object.keys(r.weights);
+  f.budget = r.budget ?? null;
+  f.windowStart = r.windowStart ?? null;
+  f.windowEnd = r.windowEnd ?? null;
+  f.maxTravel = r.maxTravel ?? null;
+  f.range = r.range ?? null;
+  f.mode = r.mode || "auto";
+  f.circumstances = [...r.circumstances];
+  if (f.windowStart != null) fitSpan();
+
+  if (r.date && isCalendarDate(r.date) && r.date >= TODAY && r.date !== state.date) {
+    state.date = r.date;
+    state.weather = null;
+    state.selectedId = null;
+    pickClock();
+    reloadEvents();
+  }
+  /* A place named out loud is the same instruction as picking one on the
+     question: geocode it, then fetch the feed and re-measure from there. */
+  if (r.place && r.place !== state.voice.placedAs) {
+    state.voice.placedAs = r.place;
+    findPlace(r.place);
+  }
+}
+
+async function heard(text, { reading, mode }) {
+  state.reading = state.voice.turns ? mergeReading(state.reading, reading) : reading;
+  state.voice.turns += 1;
+  state.voice.mode = mode;
+  state.voice.transcript = text;
+  applyReading();
+
+  if (GO_WORDS.test(text)) return enterResults();
+
+  const q = nextQuestion(state.reading, state.voice.asked);
+  if (q && state.voice.turns < 3) {
+    state.voice.asked.push(q.slot);
+    state.voice.ask = q;
+  } else {
+    state.voice.ask = null;
+  }
+  render();
+}
+
+async function sendText(text) {
+  if (!text.trim()) return;
+  state.voice.note = null;
+  el.voiceText.value = "";
+  state.voice.transcript = text;
+  render();
+  const out = await voice.fromText(text, voiceContext());
+  if (out.mode === "local" && READER !== "local") {
+    state.voice.note = out.note === "no-key"
+      ? "Read here in the browser; the server has no voice key."
+      : "The server did not answer, so this was read here in the browser.";
+  }
+  heard(out.transcript || text, out);
+}
+
+/* Two ways to get a transcript. Gemini does it in the same call that reads
+   it, which is the better one; if it refuses, this browser listens instead
+   and only the words are sent on. The switch is automatic and said once. */
+const LISTEN_NOTE = READER === "local"
+  ? "Listening. Everything is worked out here in your browser."
+  : SPEECH_NOTE;
+
+async function talkInBrowser() {
+  if (voice.listeningInBrowser()) return voice.stopBrowser();
+  try {
+    state.voice.note = LISTEN_NOTE;
+    render();
+    const text = await voice.listenInBrowser();
+    state.voice.phase = "thinking";
+    render();
+    await sendText(text);
+    if (!state.voice.note) state.voice.note = LISTEN_NOTE;
+    render();
+  } catch (err) {
+    state.voice.phase = "idle";
+    state.voice.note = micTrouble(err.message);
+    render();
+  }
+}
+
+async function talk() {
+  if (state.voice.phase === "thinking") return;
+  if (state.voice.sttBlocked) return talkInBrowser();
+
+  if (voice.recording()) {
+    const blob = await voice.stop();
+    if (!blob) {
+      state.voice.note = "That was too short to hear. Hold the button while you talk.";
+      return render();
+    }
+    try {
+      const out = await voice.fromAudio(blob, voiceContext());
+      state.voice.note = null;
+      return heard(out.transcript, out);
+    } catch (err) {
+      /* No transcript means there is nothing for the local parser to read,
+         so say so and point at the box that always works. */
+      /* A refusal on billing grounds is not something to hand back to the
+         user: change route and carry on. */
+      if (isBillingRefusal(err)) {
+        state.voice.sttBlocked = true;
+        state.voice.phase = "idle";
+        if (canListenInBrowser()) { state.voice.note = SPEECH_NOTE; render(); return talkInBrowser(); }
+        state.voice.note = "Transcription is unavailable and this browser cannot listen either. Type it below and it is read exactly the same.";
+        return render();
+      }
+      state.voice.note = err.reason === "stale-server"
+        ? "The server is running the old code. Stop it and run npm start again."
+        : err.reason === "no-key"
+          ? "Voice is not configured on the server yet. Type it and it still works."
+          : `Could not transcribe that: ${err.message} Type it below and it is understood the same.`;
+      state.voice.phase = "idle";
+      return render();
+    }
+  }
+
+  try {
+    state.voice.note = null;
+    await voice.start();
+    render();
+  } catch (err) {
+    state.voice.note = micTrouble(err.message);
+    render();
+  }
+}
+
+function mountVoice() {
+  el.mic.addEventListener("click", talk);
+  el.voiceForm.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    sendText(el.voiceText.value);
+  });
+  el.voiceDone.addEventListener("click", () => enterResults());
+  el.voiceChips.addEventListener("click", () => {
+    state.screen = "wizard";
+    state.step = 0;
+    builtStep = -1;
+    syncHash(true);
+    render();
+  });
+  el.voiceOpen.addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-say]");
+    if (b) sendText(b.dataset.say);
+  });
+  /* With the local reader there is nobody to send a recording to, so the
+     browser does the listening: free, instant, and no upload. */
+  if (READER === "local" && canListenInBrowser()) {
+    state.voice.sttBlocked = true;
+  } else if (!canRecord() && canListenInBrowser()) {
+    state.voice.sttBlocked = true;      /* no recorder, but it can still listen */
+  } else if (!canRecord()) {
+    el.mic.disabled = true;
+    el.mic.classList.add("is-off");
+    state.voice.note = micTrouble("unsupported");
+  }
+}
+
+/* The six things an answer can rule out, and whether anything has. */
+function openRows() {
+  const f = state.filters;
+  /* A third entry is what to show when nothing was said: "any" for most
+     rows, but the day always has a real answer behind it. */
+  return [
+    ["Into", Object.keys(f.interestWeights).length
+      ? Object.entries(f.interestWeights).sort((a, b) => b[1] - a[1]).slice(0, 3)
+        .map(([i]) => labelOf(INTERESTS, i)).join(", ")
+      : null],
+    ["Day", isToday() ? null : fmtDate(state.date), "today"],
+    ["Free", f.windowStart == null ? null : `${fmtClock(f.windowStart)} to ${fmtClock(f.windowEnd)}`],
+    ["Spend", f.budget ? labelOf(BUDGETS, f.budget) : null],
+    ["Range", f.maxTravel == null ? null : `within ${f.maxTravel} minutes`],
+    ["Needs", f.circumstances.length ? f.circumstances.map((c) => labelOf(CIRCUMSTANCES, c)).join(", ") : null]
+  ];
+}
+
+const OPENERS = [
+  "I'm bored", "Something free tonight", "I'm new here and don't know anyone",
+  "Somewhere quiet to work", "Free food", "Something outside"
+];
+
+function renderVoice() {
+  const r = state.reading;
+  const rows = openRows();
+  const filtering = rows.filter(([, v]) => v).length;
+  /* Answers remembered from a previous visit are still answers. Deciding
+     this from voice.turns alone made the page restore filters and then
+     claim nothing had been said. */
+  const carried = state.voice.turns === 0 && filtering > 0;
+  const said = state.voice.turns > 0 || filtering > 0;
+
+  el.voiceCount.textContent = carried ? "From last time" : said ? "Heard you" : "Talking";
+  el.voiceQ.textContent = state.voice.ask ? state.voice.ask.q
+    : carried ? "Still after the same thing?"
+      : said ? "Anything else?" : "So. What do you feel like doing?";
+  el.voiceHint.textContent = state.voice.ask ? state.voice.ask.hint
+    : carried ? "This is what you asked for last time. Say something new to replace it, or Start over to clear it."
+      : said ? "Or show me what's on. What you left out stays open."
+        : "Say it however you like. Whatever you leave out stays open.";
+
+  el.micNote.textContent = state.voice.note || "";
+  el.voiceTranscript.textContent = state.voice.transcript || "";
+  el.voiceHeard.innerHTML = said && r.said.length
+    ? r.said.map((x) => `<span class="heard-chip">${esc(x)}</span>`).join("")
+    : "";
+
+  const n = countWith(state.filters);
+  el.voiceLiveN.textContent = n;
+  el.voiceLiveT.textContent = n === 1
+    ? `thing fits, out of ${state.events.length} on today`
+    : `things fit, out of ${state.events.length} on today`;
+
+  el.voiceKicker.textContent = said ? "What it is filtering on" : "Tell it what you are after";
+  el.voiceEcho.textContent = carried
+    ? "Carried over from your last visit. Everything marked any is still open."
+    : said
+      ? "Everything still marked any is not filtering anything out."
+      : "Anything you do not mention stays wide open. Only what you say is used to rule things out.";
+
+  const setCount = filtering;
+  el.voiceOpen.innerHTML = `
+    <div class="open-grid">${rows.map(([k, v, blank]) => `
+      <div class="open-row${v ? " is-set" : ""}">
+        <span class="open-k">${k}</span>
+        <span class="open-v">${v ? esc(v) : (blank || "any")}</span>
+        <span class="open-s">${v ? "filtering" : "not filtering"}</span>
+      </div>`).join("")}</div>
+    ${said ? "" : `<p class="open-note">Nothing said yet, so nothing is ruled out.</p>`}
+    ${said && !setCount ? `<p class="open-note">Nothing you said rules anything out, so everything on today is still here, ordered by what you can actually get to.</p>` : ""}
+    ${said ? "" : `<div class="open-eg"><p class="ask-sub">Or try one of these:</p>
+      <div class="chips">${OPENERS.map((o) => `<button type="button" class="chip" data-say="${esc(o)}"><span>${esc(o)}</span></button>`).join("")}</div></div>`}`;
+
+  el.voiceDone.textContent = said ? "Show me what's on" : "Skip, show me everything";
+  paintMic();
+}
 
 /* ---- the questions --------------------------------------------------- */
 
@@ -849,6 +1210,11 @@ function mountWizard() {
     const at = readHash();
     if (!at) return;
     if (at.screen === "results" && state.screen !== "results") return enterResults({ fromHistory: true });
+    if (at.screen === "voice") {
+      state.screen = "voice";
+      render();
+      return;
+    }
     if (at.screen === "wizard") {
       /* Arriving here by Back is an edit of results that already exist,
          and the step body must be rebuilt from state, not the stale DOM. */
@@ -868,7 +1234,12 @@ function mountWizard() {
     if (kind === "budget") state.filters.budget = value;
     else if (kind === "range") setRange(value);
     else if (kind === "mode") state.filters.mode = value;
-    else if (kind === "tag") state.filters.interests = toggled(state.filters.interests, value);
+    else if (kind === "tag") {
+      state.filters.interests = toggled(state.filters.interests, value);
+      if (state.filters.interests.includes(value)) state.filters.interestWeights[value] = 1;
+      else delete state.filters.interestWeights[value];
+      state.reading.broad = !Object.keys(state.filters.interestWeights).length;
+    }
     else if (kind === "circ") state.filters.circumstances = toggled(state.filters.circumstances, value);
     updateStep();
   });
@@ -1006,6 +1377,7 @@ function setRange(id) {
 function fitSpan() {
   const f = state.filters;
   const s = span();
+  if (f.windowStart == null) return;
   if (f.windowStart < s.start || f.windowEnd > s.end) state.spanId = "day";
 }
 
@@ -1041,13 +1413,15 @@ const HASH_Q = /^#q([1-6])$/;
 function readHash() {
   const h = window.location.hash;
   if (h === "#results") return { screen: "results" };
+  if (h === "#talk") return { screen: "voice" };
   const m = HASH_Q.exec(h);
   if (m) return { screen: "wizard", step: Number(m[1]) - 1 };
   return null;
 }
 
 function syncHash(push) {
-  const want = state.screen === "results" ? "#results" : `#q${state.step + 1}`;
+  const want = state.screen === "results" ? "#results"
+    : state.screen === "voice" ? "#talk" : `#q${state.step + 1}`;
   if (window.location.hash === want) return;
   const url = `${window.location.pathname}${window.location.search}${want}`;
   if (push) window.history.pushState(null, "", url);
@@ -1063,6 +1437,7 @@ function saveAnswers() {
   try {
     localStorage.setItem(ANSWERS_KEY, JSON.stringify({
       filters: state.filters,
+      reading: state.reading,
       date: state.date,
       origin: state.origin,
       travelSource: state.travelSource,
@@ -1077,8 +1452,12 @@ function loadAnswers() {
     const j = JSON.parse(localStorage.getItem(ANSWERS_KEY) || "null");
     if (!j || !j.filters) return false;
     state.filters = { ...state.filters, ...j.filters };
-    const r = RANGES.find((x) => x.id === state.filters.range);
-    if (!r || r.minutes !== state.filters.maxTravel) state.filters.range = rangeFor(state.filters.maxTravel);
+    if (!state.filters.interestWeights) state.filters.interestWeights = {};
+    if (j.reading) state.reading = { ...emptyReading(), ...j.reading };
+    if (state.filters.maxTravel != null) {
+      const r = RANGES.find((x) => x.id === state.filters.range);
+      if (!r || r.minutes !== state.filters.maxTravel) state.filters.range = rangeFor(state.filters.maxTravel);
+    }
     if (j.origin && Number.isFinite(j.origin.lat)) state.origin = j.origin;
     if (!WANTED_DATE && isCalendarDate(j.date) && j.date >= TODAY) state.date = j.date;
     if (j.travelSource) state.travelSource = j.travelSource;
@@ -1566,6 +1945,8 @@ function mountRail() {
   });
 
   rail.winStart.addEventListener("input", () => {
+    const w = windowOf();
+    state.filters.windowEnd = state.filters.windowEnd ?? w.end;
     state.filters.windowStart = Math.min(Number(rail.winStart.value), state.filters.windowEnd - 0.25);
     state.clockPinned = false;
     if (state.clockFallback || state.nowAuto) pickClock();
@@ -1573,6 +1954,8 @@ function mountRail() {
     render();
   });
   rail.winEnd.addEventListener("input", () => {
+    const w = windowOf();
+    state.filters.windowStart = state.filters.windowStart ?? w.start;
     state.filters.windowEnd = Math.max(Number(rail.winEnd.value), state.filters.windowStart + 0.25);
     state.clockPinned = false;
     if (state.clockFallback || state.nowAuto) pickClock();
@@ -1605,7 +1988,8 @@ function updateRail(items) {
   rail.nowReset.hidden = state.nowAuto;
   if (document.activeElement !== rail.nowRange) rail.nowRange.value = now;
 
-  const mid = (f.windowStart + f.windowEnd) / 2;
+  const win = windowOf();
+  const mid = (win.start + win.end) / 2;
   const w = weatherAt(mid);
   rail.nowWeather.textContent = !forecast()
     ? "Checking the forecast."
@@ -1627,34 +2011,40 @@ function updateRail(items) {
     (gone ? ` ${gone} already finished.` : "");
   rail.feed.textContent = state.feed.note;
 
-  const intoLabels = f.interests.map((i) => labelOf(INTERESTS, i));
+  const intoLabels = Object.entries(f.interestWeights)
+    .sort((a, b) => b[1] - a[1]).slice(0, 4)
+    .map(([i]) => labelOf(INTERESTS, i));
   const needLabels = f.circumstances.map((c) => labelOf(CIRCUMSTANCES, c));
 
+  /* "any" is shown in its own colour: it is the rows that are not "any"
+     that are doing the filtering, and that is worth seeing at a glance. */
+  const ANY = "any";
   rail.list.innerHTML = [
-    ["From", esc(state.origin.label), 0],
-    ["Day", isToday() ? "today" : fmtDate(state.date), 3],
-    ["Into", intoLabels.length ? esc(intoLabels.join(", ")) : "anything", 1],
-    ["Spend", esc(labelOf(BUDGETS, f.budget)), 2],
-    ["Free", `${fmtClock(f.windowStart)} to ${fmtClock(f.windowEnd)}`, 3],
-    ["Range", f.range ? esc(labelOf(RANGES, f.range)) : `within ${f.maxTravel} minutes`, 4],
-    ["By", esc(labelOf(MODES, f.mode)), 4],
-    ["Needs", needLabels.length ? esc(needLabels.join(", ")) : "nothing in particular", 5]
-  ].map(([k, v, step]) => `<div class="answer">
+    ["From", esc(state.origin.label), 0, true],
+    ["Day", isToday() ? "today" : fmtDate(state.date), 3, !isToday()],
+    ["Into", intoLabels.length ? esc(intoLabels.join(", ")) : ANY, 1, intoLabels.length > 0],
+    ["Spend", f.budget ? esc(labelOf(BUDGETS, f.budget)) : ANY, 2, f.budget != null],
+    ["Free", f.windowStart == null ? ANY : `${fmtClock(f.windowStart)} to ${fmtClock(f.windowEnd)}`, 3, f.windowStart != null],
+    ["Range", f.maxTravel == null ? ANY : (f.range ? esc(labelOf(RANGES, f.range)) : `within ${f.maxTravel} minutes`), 4, f.maxTravel != null],
+    ["By", f.mode && f.mode !== "auto" ? esc(labelOf(MODES, f.mode)) : ANY, 4, Boolean(f.mode && f.mode !== "auto")],
+    ["Needs", needLabels.length ? esc(needLabels.join(", ")) : ANY, 5, needLabels.length > 0]
+  ].map(([k, v, step, set]) => `<div class="answer${set ? "" : " is-any"}">
       <dt>${k}</dt>
       <dd>${v}</dd>
       <button type="button" class="link link-deep" data-goto="${step}">change</button>
     </div>`).join("");
 
-  rail.windowVal.textContent = `${fmtClock(f.windowStart)} to ${fmtClock(f.windowEnd)}`;
-  rail.travelVal.textContent = `${f.maxTravel} min`;
+  rail.windowVal.textContent = f.windowStart == null
+    ? "any time" : `${fmtClock(f.windowStart)} to ${fmtClock(f.windowEnd)}`;
+  rail.travelVal.textContent = f.maxTravel == null ? "any distance" : `${f.maxTravel} min`;
 
   [rail.winStart, rail.winEnd].forEach((input) => {
     input.min = s.start;
     input.max = s.end;
   });
-  if (document.activeElement !== rail.winStart) rail.winStart.value = f.windowStart;
-  if (document.activeElement !== rail.winEnd) rail.winEnd.value = f.windowEnd;
-  if (document.activeElement !== rail.travel) rail.travel.value = f.maxTravel;
+  if (document.activeElement !== rail.winStart) rail.winStart.value = win.start;
+  if (document.activeElement !== rail.winEnd) rail.winEnd.value = win.end;
+  if (document.activeElement !== rail.travel) rail.travel.value = travelCap();
 }
 
 function weatherEffect(w) {
@@ -1888,14 +2278,15 @@ function placeResultsPanel() {
 
 function defaultFilters() {
   return {
-    windowStart: 18.5,
-    windowEnd: 21,
-    maxTravel: SEED_USER.maxTravelMinutes,
-    budget: SEED_USER.budget,
-    range: SEED_USER.range,
-    mode: SEED_USER.mode,
+    windowStart: null,
+    windowEnd: null,
+    maxTravel: null,
+    budget: null,
+    range: null,
+    mode: "auto",
     circumstances: [],
-    interests: []
+    interests: [],
+    interestWeights: {}
   };
 }
 
@@ -1913,8 +2304,11 @@ function startOver() {
   state.selectedId = null;
   state.hoverId = null;
   state.returnTo = null;
-  state.screen = "wizard";
+  state.screen = "voice";
   state.step = 0;
+  state.reading = emptyReading();
+  state.voice = { phase: "idle", note: null, turns: 0, asked: [], mode: null, ask: null };
+  voice.reset();
   builtStep = -1;
   originPick++;
   closeSuggestions();
@@ -1929,6 +2323,8 @@ function startOver() {
 function render() {
   if (state.status === "loading") return;
   if (state.status === "error") {
+    el.sideVoice.hidden = true;
+    el.mainVoice.hidden = true;
     el.sideWizard.hidden = true;
     el.mainWizard.hidden = true;
     el.sideResults.hidden = false;
@@ -1937,18 +2333,26 @@ function render() {
     return;
   }
 
+  const onVoice = state.screen === "voice";
   const onWizard = state.screen === "wizard";
+  const onResults = state.screen === "results";
+  el.sideVoice.hidden = !onVoice;
+  el.mainVoice.hidden = !onVoice;
   el.sideWizard.hidden = !onWizard;
   el.mainWizard.hidden = !onWizard;
-  el.sideResults.hidden = onWizard;
-  el.mainResults.hidden = onWizard;
-  el.shell.classList.toggle("is-wizard", onWizard);
-  el.shell.classList.toggle("is-results", !onWizard);
+  el.sideResults.hidden = !onResults;
+  el.mainResults.hidden = !onResults;
+  el.shell.classList.toggle("is-wizard", !onResults);
+  el.shell.classList.toggle("is-results", onResults);
   placeResultsPanel();
   if (el.navProfile) el.navProfile.textContent = session()?.profile?.username || "Log in";
   if (state.clockFallback || state.nowAuto) pickClock();
   saveAnswers();
 
+  if (onVoice) {
+    renderVoice();
+    return;
+  }
   if (onWizard) {
     renderStep();
     return;
@@ -1979,9 +2383,9 @@ function render() {
   radial.update({
     items,
     span: span(),
-    windowStart: state.filters.windowStart,
-    windowEnd: state.filters.windowEnd,
-    maxTravel: state.filters.maxTravel,
+    windowStart: windowOf().start,
+    windowEnd: windowOf().end,
+    maxTravel: travelCap(),
     originLabel: state.origin.label,
     delay: delayFor(items)
   });
@@ -2018,7 +2422,7 @@ function esc(s) {
    forget the answers before anything is read back. */
 if (window.location.hash === "#start") {
   clearAnswers();
-  window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#q1`);
+  window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#talk`);
 }
 
 /* Remembered answers first, so the very first feed request already asks
@@ -2030,6 +2434,7 @@ loadEvents(state.origin, state.date)
     state.events = events;
     state.feed = feed;
     state.status = "ready";
+    mountVoice();
     mountWizard();
     mountResults();
     mountRail();
@@ -2038,10 +2443,13 @@ loadEvents(state.origin, state.date)
        the results, otherwise question one. */
     const at = readHash();
     if (at?.screen === "wizard") {
+      state.screen = "wizard";
       state.step = at.step;
       if (answered) state.returnTo = "results";
     } else if (at?.screen === "results" || answered) {
       state.screen = "results";
+    } else {
+      state.screen = "voice";
     }
     pickClock();
     syncHash(false);
