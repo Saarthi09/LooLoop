@@ -5,7 +5,7 @@ import {
 import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js?v=30";
 import { session, api, profileUrl, webUrl, ANSWERS_KEY, clearAnswers } from "./api.js?v=30";
 import { interpret, mergeReading, emptyReading, nextQuestion, summarize, textScore } from "./interpret.js?v=30";
-import { createVoice, canRecord, canListenInBrowser, isBillingRefusal, micTrouble, SPEECH_NOTE, READER } from "./voice.js?v=30";
+import { createVoice, canListenInBrowser, micTrouble } from "./voice.js?v=33";
 
 /* Single state object. Every handler mutates state, then calls render(). */
 const state = {
@@ -900,20 +900,14 @@ async function sendText(text) {
   state.voice.transcript = text;
   render();
   const out = await voice.fromText(text, voiceContext());
-  if (out.mode === "local" && READER !== "local") {
-    state.voice.note = out.note === "no-key"
-      ? "Read here in the browser; the server has no voice key."
-      : "The server did not answer, so this was read here in the browser.";
-  }
   heard(out.transcript || text, out);
 }
 
 /* Two ways to get a transcript. Gemini does it in the same call that reads
    it, which is the better one; if it refuses, this browser listens instead
    and only the words are sent on. The switch is automatic and said once. */
-const LISTEN_NOTE = READER === "local"
-  ? "Listening. Everything is worked out here in your browser."
-  : SPEECH_NOTE;
+const LISTEN_NOTE =
+  "Listening. Your words will fill the filters here in your browser.";
 
 async function talkInBrowser() {
   if (voice.listeningInBrowser()) return voice.stopBrowser();
@@ -935,48 +929,7 @@ async function talkInBrowser() {
 
 async function talk() {
   if (state.voice.phase === "thinking") return;
-  if (state.voice.sttBlocked) return talkInBrowser();
-
-  if (voice.recording()) {
-    const blob = await voice.stop();
-    if (!blob) {
-      state.voice.note = "That was too short to hear. Hold the button while you talk.";
-      return render();
-    }
-    try {
-      const out = await voice.fromAudio(blob, voiceContext());
-      state.voice.note = null;
-      return heard(out.transcript, out);
-    } catch (err) {
-      /* No transcript means there is nothing for the local parser to read,
-         so say so and point at the box that always works. */
-      /* A refusal on billing grounds is not something to hand back to the
-         user: change route and carry on. */
-      if (isBillingRefusal(err)) {
-        state.voice.sttBlocked = true;
-        state.voice.phase = "idle";
-        if (canListenInBrowser()) { state.voice.note = SPEECH_NOTE; render(); return talkInBrowser(); }
-        state.voice.note = "Transcription is unavailable and this browser cannot listen either. Type it below and it is read exactly the same.";
-        return render();
-      }
-      state.voice.note = err.reason === "stale-server"
-        ? "The server is running the old code. Stop it and run npm start again."
-        : err.reason === "no-key"
-          ? "Voice is not configured on the server yet. Type it and it still works."
-          : `Could not transcribe that: ${err.message} Type it below and it is understood the same.`;
-      state.voice.phase = "idle";
-      return render();
-    }
-  }
-
-  try {
-    state.voice.note = null;
-    await voice.start();
-    render();
-  } catch (err) {
-    state.voice.note = micTrouble(err.message);
-    render();
-  }
+  return talkInBrowser();
 }
 
 function mountVoice() {
@@ -997,13 +950,9 @@ function mountVoice() {
     const b = ev.target.closest("[data-say]");
     if (b) sendText(b.dataset.say);
   });
-  /* With the local reader there is nobody to send a recording to, so the
-     browser does the listening: free, instant, and no upload. */
-  if (READER === "local" && canListenInBrowser()) {
-    state.voice.sttBlocked = true;
-  } else if (!canRecord() && canListenInBrowser()) {
-    state.voice.sttBlocked = true;      /* no recorder, but it can still listen */
-  } else if (!canRecord()) {
+  /* Browser speech recognition supplies the text; the local reader fills
+     the same filters as the manual questionnaire. */
+  if (!canListenInBrowser()) {
     el.mic.disabled = true;
     el.mic.classList.add("is-off");
     state.voice.note = micTrouble("unsupported");
