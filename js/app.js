@@ -1,9 +1,9 @@
 import {
   loadEvents, SEED_USER, estimateTravel, geocode, suggestPlaces, similarity, fetchForecast, SAMPLE_FORECAST,
   INTERESTS, CIRCUMSTANCES, BUDGETS, RANGES, MODES, ART_PALETTES, QUICK_PLACES, TODAY, WANTED_DATE, isCalendarDate
-} from "./data.js?v=22";
-import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js?v=22";
-import { session, api, profileUrl, webUrl, ANSWERS_KEY, clearAnswers } from "./api.js?v=22";
+} from "./data.js?v=23";
+import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js?v=23";
+import { session, api, profileUrl, webUrl, ANSWERS_KEY, clearAnswers } from "./api.js?v=23";
 
 /* Single state object. Every handler mutates state, then calls render(). */
 const state = {

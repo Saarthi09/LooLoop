@@ -243,16 +243,25 @@ export function createRadial(root, { onSelect, onHover } = {}) {
       ].join(" "));
     }
 
-    RINGS.forEach((m, i) => {
+    /* Ring labels sit on the baseline, left of centre, and crowd as the
+       travel limit grows. Working in from the rim, a label is shown only
+       if there is room for it after the last one shown; better a missing
+       label than two on top of each other. */
+    const LABEL_ROOM = 52;
+    let lastX = CX - R_MAX + LABEL_ROOM;   /* the rim's own label */
+    for (let i = RINGS.length - 1; i >= 0; i -= 1) {
+      const m = RINGS[i];
       const r = radiusFor(m, view.maxTravel);
       const on = m < view.maxTravel;
       ringEls[i].setAttribute("r", on ? r : 0);
       ringEls[i].style.opacity = on ? "" : "0";
-      ringLabels[i].setAttribute("x", CX - r);
-      /* Drop the label rather than let it collide with the rim's own. */
-      ringLabels[i].style.opacity = on && r < R_MAX - 60 ? "" : "0";
+      const x = CX - r;
+      ringLabels[i].setAttribute("x", x);
+      const fits = on && x - lastX >= LABEL_ROOM;
+      ringLabels[i].style.opacity = fits ? "" : "0";
       ringLabels[i].textContent = `${m} min`;
-    });
+      if (fits) lastX = x;
+    }
     rim.setAttribute("r", R_MAX);
     rimLabel.textContent = `${view.maxTravel} min`;
     originLabel.textContent = view.originLabel;
