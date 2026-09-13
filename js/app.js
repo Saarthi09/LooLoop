@@ -1,8 +1,9 @@
 import {
   loadEvents, SEED_USER, estimateTravel, geocode, similarity, fetchForecast, SAMPLE_FORECAST,
-  INTERESTS, CIRCUMSTANCES, BUDGETS, SCOPES, ART_PALETTES, QUICK_PLACES, API_BASE
+  INTERESTS, CIRCUMSTANCES, BUDGETS, SCOPES, ART_PALETTES, QUICK_PLACES
 } from "./data.js";
 import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js";
+import { session, api, profileUrl, webUrl } from "./api.js";
 
 /* Single state object. Every handler mutates state, then calls render(). */
 const state = {
@@ -14,6 +15,8 @@ const state = {
   circleNote: null,          // { id, text } shown under one card
   screen: "wizard",          // wizard | results
   step: 0,
+  returnTo: null,            // "results" while editing one answer from the results
+  clockFallback: false,      // true when the real clock is past the window and we pretend
   origin: { ...SEED_USER.origin },
   travelSource: "feed",      // feed | estimated
   geo: { busy: false, note: null },
@@ -583,7 +586,12 @@ function artFor(e) {
 /* ---- elements -------------------------------------------------------- */
 
 const el = {
-  wizard: document.getElementById("wizard"),
+  shell: document.getElementById("shell"),
+  sideWizard: document.getElementById("side-wizard"),
+  mainWizard: document.getElementById("main-wizard"),
+  stepDone: document.getElementById("step-done"),
+  navHome: document.getElementById("nav-home"),
+  home: document.getElementById("home"),
   stepCount: document.getElementById("step-count"),
   stepQ: document.getElementById("step-q"),
   stepHint: document.getElementById("step-hint"),
@@ -596,7 +604,8 @@ const el = {
   stepSkip: document.getElementById("step-skip"),
   stepFeed: document.getElementById("step-feed"),
 
-  results: document.getElementById("results"),
+  sideResults: document.getElementById("side-results"),
+  mainResults: document.getElementById("main-results"),
   standfirst: document.getElementById("standfirst"),
   navProfile: document.getElementById("nav-profile"),
   spans: document.getElementById("spans"),
@@ -706,22 +715,47 @@ function mountWizard() {
     const b = ev.target.closest("[data-step]");
     if (!b) return;
     state.step = Number(b.dataset.step);
+    syncHash(true);
     renderStep();
   });
 
   el.stepBack.addEventListener("click", () => {
     if (state.step === 0) return;
     state.step -= 1;
+    syncHash(true);
     renderStep();
   });
 
   el.stepNext.addEventListener("click", () => {
     if (state.step >= STEPS.length - 1) return enterResults();
     state.step += 1;
+    syncHash(true);
     renderStep();
   });
 
   el.stepSkip.addEventListener("click", enterResults);
+  el.stepDone.addEventListener("click", enterResults);
+
+  /* On this page "What's on" and the wordmark mean the results, not a
+     reload that throws the answers away. */
+  [el.home, el.navHome].forEach((a) => a && a.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    if (state.screen === "results") return;
+    enterResults();
+  }));
+
+  /* The browser's Back and Forward buttons walk the questions and the
+     results like pages. */
+  window.addEventListener("hashchange", () => {
+    const at = readHash();
+    if (!at) return;
+    if (at.screen === "results" && state.screen !== "results") return enterResults({ fromHistory: true });
+    if (at.screen === "wizard") {
+      state.screen = "wizard";
+      state.step = at.step;
+      render();
+    }
+  });
 
   el.stepBody.addEventListener("click", (ev) => {
     const chip = ev.target.closest(".chip");
@@ -745,7 +779,9 @@ function renderStep() {
   el.stepHint.textContent = s.hint;
   el.stepBack.disabled = state.step === 0;
   el.stepNext.textContent = state.step === STEPS.length - 1 ? "Show me what's on" : "Next";
-  el.stepSkip.hidden = state.step === STEPS.length - 1;
+  const editing = state.returnTo === "results";
+  el.stepDone.hidden = !editing;
+  el.stepSkip.hidden = editing || state.step === STEPS.length - 1;
 
   /* Rebuilding on every render would wipe whatever is being typed. */
   if (builtStep !== state.step) {
@@ -838,8 +874,10 @@ function fitSpan() {
   if (f.windowStart < s.start || f.windowEnd > s.end) state.spanId = "day";
 }
 
-function enterResults() {
+function enterResults({ fromHistory = false } = {}) {
   state.screen = "results";
+  state.returnTo = null;
+  if (!fromHistory) syncHash(true);
   revealing = true;
   el.svg.classList.add("is-live", "is-reveal");
   render();
@@ -854,9 +892,86 @@ function enterResults() {
 function editAnswers(step = 0) {
   state.screen = "wizard";
   state.step = step;
+  state.returnTo = "results";
   builtStep = -1;
+  syncHash(true);
   state.hoverId = null;
   render();
+}
+
+/* ---- history --------------------------------------------------------- */
+
+const HASH_Q = /^#q([1-6])$/;
+
+function readHash() {
+  const h = window.location.hash;
+  if (h === "#results") return { screen: "results" };
+  const m = HASH_Q.exec(h);
+  if (m) return { screen: "wizard", step: Number(m[1]) - 1 };
+  return null;
+}
+
+function syncHash(push) {
+  const want = state.screen === "results" ? "#results" : `#q${state.step + 1}`;
+  if (window.location.hash === want) return;
+  const url = `${window.location.pathname}${window.location.search}${want}`;
+  if (push) window.history.pushState(null, "", url);
+  else window.history.replaceState(null, "", url);
+}
+
+/* ---- answers, remembered ---------------------------------------------
+   Coming back from the circles or profile page should land on the results
+   with the same answers, not on question one. Only the answers are kept;
+   nothing about who you are. */
+
+const ANSWERS_KEY = "looloop-answers";
+
+function saveAnswers() {
+  try {
+    localStorage.setItem(ANSWERS_KEY, JSON.stringify({
+      filters: state.filters,
+      origin: state.origin,
+      travelSource: state.travelSource,
+      spanId: state.spanId,
+      answered: state.screen === "results" || state.returnTo === "results"
+    }));
+  } catch (err) { /* private mode, or storage full; nothing to do */ }
+}
+
+function loadAnswers() {
+  try {
+    const j = JSON.parse(localStorage.getItem(ANSWERS_KEY) || "null");
+    if (!j || !j.filters) return false;
+    state.filters = { ...state.filters, ...j.filters };
+    if (j.origin && Number.isFinite(j.origin.lat)) state.origin = j.origin;
+    if (j.travelSource) state.travelSource = j.travelSource;
+    if (j.spanId && SPANS[j.spanId]) state.spanId = j.spanId;
+    return Boolean(j.answered);
+  } catch (err) {
+    return false;
+  }
+}
+
+/* ---- the clock, sensibly ---------------------------------------------
+   Ranking against the real clock is the point, but opened at half past
+   eleven at night every evening listing has already finished and the page
+   is empty. When the real time is past the free window, pretend it is
+   half an hour before the window opens and say so. Scrubbing the clock
+   or choosing "use the clock" takes over from this. */
+
+function pickClock() {
+  const d = new Date();
+  const real = d.getHours() + d.getMinutes() / 60;
+  const f = state.filters;
+  const late = real > f.windowEnd - 0.25 || real < 5;
+  if (!late) {
+    state.clockFallback = false;
+    state.nowAuto = true;
+    return;
+  }
+  state.clockFallback = true;
+  state.nowAuto = false;
+  state.nowManual = Math.max(span().start, Math.round((f.windowStart - 0.5) * 4) / 4);
 }
 
 /* ---- location -------------------------------------------------------- */
@@ -963,75 +1078,44 @@ async function useMyLocation() {
    going, with the Instagram handle they chose to share. Joining needs the
    session the profile page stores in localStorage. */
 
-const SESSION_KEY = "looloop-session";
-const PROFILE_URL = "first/profile.html";
-const CIRCLES_URL = "first/circles.html";
+const CIRCLES_URL = "circles.html";
 const joined = new Set();
 
-function session() {
-  try {
-    return JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
-  } catch (err) {
-    return null;
-  }
-}
-
-function dropSession() {
-  localStorage.removeItem(SESSION_KEY);
-  joined.clear();
-}
-
 async function loadJoined() {
-  const s = session();
-  if (!s?.accessToken) return;
+  if (!session()) return;
   try {
-    const r = await fetch(`${API_BASE}/api/circles/mine`, {
-      headers: { Authorization: `Bearer ${s.accessToken}` }
-    });
-    if (r.status === 401) return dropSession();
-    if (!r.ok) return;
-    const j = await r.json();
+    const j = await api("/api/circles/mine", { auth: true });
     (j.circles || []).forEach((c) => joined.add(String(c.event_id)));
     render();
   } catch (err) {
     /* The map still works without knowing which circles you are in. */
+    if (err.status === 401) joined.clear();
   }
 }
 
-function toProfile() {
-  const next = encodeURIComponent(window.location.pathname + window.location.search);
-  window.location.href = `${PROFILE_URL}?next=${next}`;
-}
+const toProfile = () => { window.location.href = profileUrl(); };
 
 async function joinCircle(e) {
-  const s = session();
-  if (!s?.accessToken) return toProfile();
+  if (!session()) return toProfile();
   const id = String(e.id);
   state.joining = id;
   state.circleNote = null;
   render();
   try {
-    const r = await fetch(`${API_BASE}/api/circles/join`, {
+    await api("/api/circles/join", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${s.accessToken}` },
-      body: JSON.stringify({
-        eventId: id,
-        eventName: e.title,
-        eventUrl: e.source?.url || null,
-        eventDate: e.startsAt
-      })
+      auth: true,
+      body: { eventId: id, eventName: e.title, eventUrl: e.source?.url || null, eventDate: e.startsAt }
     });
-    if (r.status === 401) {
-      dropSession();
-      return toProfile();
-    }
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(j.error || "Could not join this circle.");
     joined.add(id);
     const raw = state.events.find((x) => String(x.id) === id);
     if (raw) raw.goingCount = (raw.goingCount || 0) + 1;
     state.circleNote = { id, text: "You're in. Others who join can see your handle." };
   } catch (err) {
+    if (err.status === 401) {
+      joined.clear();
+      return toProfile();
+    }
     state.circleNote = { id, text: err.message };
   }
   state.joining = null;
@@ -1043,8 +1127,10 @@ function circleHTML(e) {
   const n = e.goingCount || 0;
   const busy = state.joining === id;
   const note = state.circleNote && state.circleNote.id === id ? state.circleNote.text : "";
-  const src = e.source?.url
-    ? `<a class="link" href="${esc(e.source.url)}" target="_blank" rel="noreferrer">${esc(e.source.name || "Details")}</a>`
+  /* The server already filters provider links to http(s); belt and braces. */
+  const href = webUrl(e.source?.url);
+  const src = href
+    ? `<a class="link" href="${esc(href)}" target="_blank" rel="noreferrer">${esc(e.source.name || "Details")}</a>`
     : `<span class="card-going">${n ? `${n} going` : ""}</span>`;
   const action = joined.has(id)
     ? `<a class="btn btn-join is-in" href="${CIRCLES_URL}">You're in, see who else</a>`
@@ -1174,6 +1260,7 @@ function mountRail() {
 
   rail.nowRange.addEventListener("input", () => {
     state.nowAuto = false;
+    state.clockFallback = false;
     state.nowManual = Number(rail.nowRange.value);
     state.reflow = "live";
     render();
@@ -1181,6 +1268,7 @@ function mountRail() {
 
   rail.nowReset.addEventListener("click", () => {
     state.nowAuto = true;
+    state.clockFallback = false;
     state.reflow = "stagger";
     render();
   });
@@ -1221,9 +1309,13 @@ function updateRail(items) {
   const shown = items.filter(inSpan);
   const now = nowHour();
 
+  const realNow = new Date();
+  const realHour = realNow.getHours() + realNow.getMinutes() / 60;
   rail.nowTime.textContent = state.nowAuto
     ? `It's ${fmtClock(Math.round(now * 4) / 4)}`
-    : `Pretending it's ${fmtClock(state.nowManual)}`;
+    : state.clockFallback
+      ? `Pretending it's ${fmtClock(state.nowManual)}, since it's ${fmtClock(Math.round(realHour * 4) / 4)} now`
+      : `Pretending it's ${fmtClock(state.nowManual)}`;
   rail.nowReset.hidden = state.nowAuto;
   if (document.activeElement !== rail.nowRange) rail.nowRange.value = now;
 
@@ -1405,16 +1497,24 @@ function showTip(e, dot) {
 function render() {
   if (state.status === "loading") return;
   if (state.status === "error") {
-    el.wizard.hidden = true;
-    el.results.hidden = false;
+    el.sideWizard.hidden = true;
+    el.mainWizard.hidden = true;
+    el.sideResults.hidden = false;
+    el.mainResults.hidden = false;
     el.standfirst.textContent = `The listings did not load. ${state.error}. Reload to try again.`;
     return;
   }
 
   const onWizard = state.screen === "wizard";
-  el.wizard.hidden = !onWizard;
-  el.results.hidden = onWizard;
-  el.navProfile.textContent = session()?.profile?.username || "Profile";
+  el.sideWizard.hidden = !onWizard;
+  el.mainWizard.hidden = !onWizard;
+  el.sideResults.hidden = onWizard;
+  el.mainResults.hidden = onWizard;
+  el.shell.classList.toggle("is-wizard", onWizard);
+  el.shell.classList.toggle("is-results", !onWizard);
+  if (el.navProfile) el.navProfile.textContent = session()?.profile?.username || "Profile";
+  if (state.clockFallback) pickClock();
+  saveAnswers();
 
   if (onWizard) {
     renderStep();
@@ -1488,6 +1588,29 @@ loadEvents()
     mountWizard();
     mountResults();
     mountRail();
+
+    /* Where to open: the address bar wins, then remembered answers land on
+       the results, otherwise question one. */
+    const answered = loadAnswers();
+    const at = readHash();
+    if (at?.screen === "wizard") {
+      state.step = at.step;
+      if (answered) state.returnTo = "results";
+    } else if (at?.screen === "results" || answered) {
+      state.screen = "results";
+    }
+    pickClock();
+    syncHash(false);
+    if (state.screen === "results") {
+      revealing = true;
+      el.svg.classList.add("is-live", "is-reveal");
+      clearTimeout(revealTimer);
+      revealTimer = setTimeout(() => {
+        revealing = false;
+        el.svg.classList.remove("is-reveal");
+        render();
+      }, 950);
+    }
     render();
     loadJoined();
   })

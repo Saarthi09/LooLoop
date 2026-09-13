@@ -7,48 +7,55 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/tokens.css?v=8">
-<link rel="stylesheet" href="css/app.css?v=8">
+<link rel="stylesheet" href="css/tokens.css?v=10">
+<link rel="stylesheet" href="css/app.css?v=10">
 </head>
 <body>
-  <!-- one question at a time -->
-  <div class="wizard" id="wizard" hidden>
-    <aside class="wizard-side">
-      <p class="wordmark wordmark-deep">Loo Loop</p>
-      <p class="step-count" id="step-count"></p>
-      <h1 class="step-q" id="step-q"></h1>
-      <p class="step-hint" id="step-hint"></p>
-      <div class="step-live">
-        <p class="step-live-n" id="step-live-n">0</p>
-        <p class="step-live-t" id="step-live-t"></p>
+  <!-- One shell for every page: the deep side panel, then the main column. -->
+  <div class="shell is-wizard" id="shell">
+    <aside class="side">
+      <div class="side-top">
+        <p class="wordmark wordmark-deep"><a href="./" id="home">Loo Loop</a></p>
+        <nav class="side-nav" aria-label="Pages">
+          <a href="./" class="is-here" id="nav-home">What's on</a>
+          <a href="circles.html">Circles</a>
+          <a href="profile.html" id="nav-profile">Profile</a>
+        </nav>
       </div>
-      <p class="step-feed" id="step-feed"></p>
-      <div class="step-dots" id="step-dots" aria-hidden="true"></div>
+
+      <!-- one question at a time -->
+      <div class="side-body" id="side-wizard" hidden>
+        <p class="step-count" id="step-count"></p>
+        <h1 class="step-q" id="step-q"></h1>
+        <p class="step-hint" id="step-hint"></p>
+        <div class="step-live">
+          <p class="step-live-n" id="step-live-n">0</p>
+          <p class="step-live-t" id="step-live-t"></p>
+        </div>
+        <p class="step-feed" id="step-feed"></p>
+        <div class="step-dots" id="step-dots" aria-hidden="true"></div>
+      </div>
+
+      <!-- everything at once -->
+      <div class="side-body" id="side-results" hidden>
+        <div id="rail" aria-label="Your answers"></div>
+      </div>
     </aside>
 
-    <section class="wizard-main">
-      <div class="step-body" id="step-body"></div>
-      <div class="step-nav">
-        <button type="button" class="btn" id="step-back">Back</button>
-        <button type="button" class="btn btn-go" id="step-next">Next</button>
-        <button type="button" class="link" id="step-skip">Skip to results</button>
-      </div>
-    </section>
-  </div>
+    <main class="main">
+      <section class="main-wizard" id="main-wizard" hidden>
+        <div class="step-body" id="step-body"></div>
+        <div class="step-nav">
+          <button type="button" class="btn" id="step-back">Back</button>
+          <button type="button" class="btn btn-go" id="step-next">Next</button>
+          <button type="button" class="btn btn-go" id="step-done" hidden>Done, back to what's on</button>
+          <button type="button" class="link" id="step-skip">Skip to results</button>
+        </div>
+      </section>
 
-  <!-- everything at once -->
-  <div class="results" id="results" hidden>
-    <header class="topbar">
-      <p class="wordmark">Loo Loop</p>
-      <p class="standfirst" id="standfirst"></p>
-      <nav class="topnav" aria-label="Account">
-        <a href="first/circles.html">Circles</a>
-        <a href="first/profile.html" id="nav-profile">Profile</a>
-      </nav>
-    </header>
+      <section class="main-results" id="main-results" hidden>
+        <p class="standfirst" id="standfirst"></p>
 
-    <main class="frame">
-      <section class="stage">
         <div class="toolbar">
           <div class="switch" id="spans" role="group" aria-label="Hours shown"></div>
           <p class="legend" id="legend"></p>
@@ -66,11 +73,9 @@
         <div class="cards" id="cards"></div>
         <p class="empty" id="empty" hidden>Nothing fits that window. Widen the time, the distance, or what you'll spend.</p>
       </section>
-
-      <aside class="rail" id="rail" aria-label="Your answers"></aside>
     </main>
   </div>
 
-  <script type="module" src="js/app.js?v=8"></script>
+  <script type="module" src="js/app.js?v=10"></script>
 </body>
 </html>

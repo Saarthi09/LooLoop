@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loo Loop, your profile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/tokens.css?v=10">
+<link rel="stylesheet" href="css/app.css?v=10">
+</head>
+<body>
+  <div class="shell is-page">
+    <aside class="side">
+      <div class="side-top">
+        <p class="wordmark wordmark-deep"><a href="./">Loo Loop</a></p>
+        <nav class="side-nav" aria-label="Pages">
+          <a href="./">What's on</a>
+          <a href="circles.html">Circles</a>
+          <a href="profile.html" class="is-here">Profile</a>
+        </nav>
+      </div>
+      <div class="side-body">
+        <p class="step-count">Your profile</p>
+        <h1 class="step-q" id="side-h">Who's going with you?</h1>
+        <p class="step-hint" id="side-hint">A username and a password is all a profile is. Add an Instagram handle if you want the people in your circles to be able to find you.</p>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section class="main-page">
+        <form id="auth" class="form" autocomplete="on">
+          <label class="field">
+            <span>Username</span>
+            <input name="username" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]+" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+          </label>
+          <label class="field">
+            <span>Password</span>
+            <input name="password" type="password" minlength="8" autocomplete="current-password" required>
+          </label>
+          <label class="field">
+            <span>Instagram <em>optional, only for a new profile</em></span>
+            <input name="instagramHandle" maxlength="30" placeholder="handle, without the @" autocomplete="off" autocapitalize="none" spellcheck="false">
+          </label>
+          <p class="form-note" id="auth-note" aria-live="polite">Usernames are lowercase letters, numbers and underscores. Passwords are at least eight characters.</p>
+          <div class="step-nav">
+            <button type="submit" class="btn btn-go" data-action="signup">Create profile</button>
+            <button type="submit" class="btn" data-action="login">Log in</button>
+          </div>
+        </form>
+
+        <div id="me" hidden>
+          <p class="ask-origin" id="me-name"></p>
+          <form id="ig" class="form">
+            <label class="field">
+              <span>Instagram <em>people in your circles can see this</em></span>
+              <input name="instagramHandle" maxlength="30" placeholder="handle, without the @" autocomplete="off" autocapitalize="none" spellcheck="false">
+            </label>
+            <p class="form-note is-ok" id="ig-note" aria-live="polite"></p>
+            <div class="step-nav">
+              <button type="submit" class="btn">Save handle</button>
+            </div>
+          </form>
+
+          <h2 class="me-h">Your circles</h2>
+          <p class="ask-note" id="me-circles-note"></p>
+          <div class="circle-list" id="me-circles"></div>
+
+          <div class="step-nav">
+            <a class="btn btn-go" href="./">Back to what's on</a>
+            <button type="button" class="btn" id="logout">Log out</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="js/profile.js?v=10"></script>
+</body>
+</html>

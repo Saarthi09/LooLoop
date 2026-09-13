@@ -34,27 +34,66 @@ body {
   line-height: 1;
 }
 
-/* ---- one question at a time ------------------------------------------ */
+/* ---- the shell every page shares --------------------------------------
+   A deep side panel on the left, a light main column on the right. The
+   questions, the results, the profile and the circles all sit in it, so
+   moving between them changes the content and nothing else. */
 
-.wizard {
+.shell {
   display: grid;
   grid-template-columns: minmax(300px, 0.82fr) minmax(0, 1.5fr);
   min-height: 100vh;
 }
 
-.wizard-side {
+.side {
+  position: sticky;
+  top: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  max-height: 100vh;
+  overflow-y: auto;
   padding: 28px 34px 30px 34px;
   background: var(--deep);
   color: var(--on-deep);
 }
 
+.side-top {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.side-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1 0 auto;
+  min-height: 0;
+}
+
+/* Results in the side panel: the same blocks the rail used, on deep. */
+.side .rail-count { color: var(--on-deep); }
+.side .rail-note,
+.side .rail-feed,
+.side .rail-cap,
+.side .slider-cap { color: var(--on-deep-2); }
+.side .rail-h,
+.side .rail-val { color: var(--on-deep); }
+.side .nowbox,
+.side .answers { background: var(--deep-2); }
+.side .slider input[type="range"] { accent-color: var(--accent); }
+.side .slider input[type="range"]:focus-visible { outline-color: var(--accent); }
+.side .tune { padding-top: 4px; }
+.side .link { color: var(--on-deep-2); }
+.side .link:hover { color: var(--on-deep); }
+.side .link:focus-visible { outline-color: var(--accent); }
+
 .wordmark-deep { color: var(--on-deep); }
 
 .step-count {
-  margin: 22px 0 0 0;
+  margin: 10px 0 0 0;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   color: var(--on-deep-2);
@@ -127,13 +166,27 @@ body {
   outline-offset: 3px;
 }
 
-.wizard-main {
+.main {
+  min-width: 0;
+  padding: 34px 44px 44px 44px;
+}
+
+/* The questions keep their nav at the foot of the column. */
+.main-wizard {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   gap: 30px;
-  padding: 92px 46px 34px 46px;
-  min-width: 0;
+  min-height: calc(100vh - 78px);
+  padding-top: 52px;
+}
+
+.main-results .standfirst { margin: 0 0 14px 0; }
+
+.cards-head-first {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .step-body { max-width: 68ch; }
@@ -201,6 +254,7 @@ body {
 /* ---- controls -------------------------------------------------------- */
 
 .btn {
+  display: inline-block;
   padding: 7px 14px;
   border: 1px solid var(--hair-2);
   border-radius: var(--r-sm);
@@ -208,6 +262,8 @@ body {
   color: var(--ink);
   font: inherit;
   font-size: 14px;
+  line-height: normal;
+  text-decoration: none;
   cursor: pointer;
 }
 
@@ -352,16 +408,7 @@ body {
   min-width: 0;
 }
 
-.rail {
-  position: sticky;
-  top: 0;
-  /* Sticky and taller than the viewport would hide its own bottom. */
-  max-height: 100vh;
-  overflow-y: auto;
-  padding: 18px 26px 40px 20px;
-  border-left: 1px solid var(--hair);
-  min-width: 0;
-}
+.rail { min-width: 0; }
 
 .toolbar {
   display: flex;
@@ -966,30 +1013,26 @@ body {
 }
 
 @media (max-width: 900px) {
-  .wizard {
+  .shell {
     grid-template-columns: minmax(0, 1fr);
     min-height: 100vh;
   }
 
-  .wizard-side { padding: 18px 20px 22px 20px; gap: 12px; }
-  .step-count { margin-top: 12px; }
-  .step-live { margin-top: 14px; }
-  .wizard-main { padding: 24px 20px 28px 20px; gap: 22px; }
-
-  .frame { grid-template-columns: minmax(0, 1fr); }
-
-  .stage { padding: 12px 16px 20px 16px; }
-
-  .rail {
+  .side {
     position: static;
     max-height: none;
     overflow-y: visible;
-    border-left: 0;
-    border-top: 1px solid var(--hair);
-    padding: 18px 16px 32px 16px;
+    padding: 18px 20px 22px 20px;
+    gap: 12px;
   }
 
-  .topbar { padding: 14px 16px 10px 16px; }
+  /* On a phone the chart comes first; the answers follow it. */
+  .shell.is-results .side { order: 2; }
+
+  .step-count { margin-top: 6px; }
+  .step-live { margin-top: 14px; }
+  .main { padding: 20px 16px 28px 16px; }
+  .main-wizard { min-height: 0; padding-top: 4px; gap: 22px; }
 
   .radial { max-height: none; }
 
@@ -1087,3 +1130,152 @@ body {
   font-size: 12px;
   color: var(--accent-ink);
 }
+
+/* ---- the other pages ---------------------------------------------------
+   Profile and circles share the two shells above: the deep side panel
+   with a main column, and the topbar with a stage and a rail. */
+
+.wordmark a { color: inherit; text-decoration: none; }
+.wordmark a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.wordmark a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.side-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 0;
+}
+
+.side-nav a.is-here {
+  color: var(--on-deep);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.side-nav a {
+  color: var(--on-deep-2);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.side-nav a:hover {
+  color: var(--on-deep);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.side-nav a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Forms start at the top of the column rather than spreading down it. */
+.page-main { justify-content: flex-start; }
+
+.form {
+  display: grid;
+  gap: 14px;
+  max-width: 420px;
+}
+
+.field {
+  display: grid;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.field em {
+  font-style: normal;
+  color: var(--ink-3);
+}
+
+.field input {
+  min-width: 0;
+  padding: 8px 11px;
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+}
+
+.field input:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+.form-note {
+  margin: 0;
+  min-height: 1.4em;
+  font-size: 13px;
+  color: var(--accent-ink);
+  max-width: 46ch;
+}
+
+.form-note.is-ok { color: var(--ink-2); }
+
+.form .step-nav { padding-top: 16px; }
+
+.me-h {
+  margin: 30px 0 6px 0;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.circle-list {
+  display: grid;
+  max-width: 420px;
+  margin-bottom: 26px;
+}
+
+.circle-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 9px 0;
+  border-top: 1px solid var(--hair);
+}
+
+.circle-row:last-child { border-bottom: 1px solid var(--hair); }
+
+.circle-row-name {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.circle-row-when {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.circle-card .card-body { padding: 13px 14px 14px 14px; }
+
+.members {
+  list-style: none;
+  margin: 10px 0 0 0;
+  padding: 0;
+}
+
+.members li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--hair-deep);
+  font-size: 13px;
+}
+
+.members-quiet { color: var(--on-deep-2); }
+
+.members-empty {
+  margin: 8px 0 0 0;
+  font-size: 13px;
+  color: var(--on-deep-2);
+}
+
+.nowbox .link-deep { display: inline-block; margin-top: 10px; }

@@ -4,22 +4,23 @@
    plain static server (Live Server, python -m http.server) the API is on
    port 3000 instead. When it cannot be reached, or has nothing on for
    today, the seed set below stands in and is labelled as a sample. */
+import { API_BASE } from "./api.js";
+
 export const USE_API = true;
-export const API_BASE = ["5500", "5501", "8000"].includes(window.location.port)
-  ? "http://localhost:3000"
-  : "";
 export const API_URL = `${API_BASE}/api/events`;
 
-/* Today, in the browser's own zone, so the seed always reads as today. */
+/* Today, in the browser's own zone, so the seed always reads as today.
+   For a demo of another day, open the page with ?date=2026-09-14. */
 const pad = (n) => String(n).padStart(2, "0");
 const localDate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const offsetOf = (d) => {
   const m = -d.getTimezoneOffset();
   return `${m < 0 ? "-" : "+"}${pad(Math.floor(Math.abs(m) / 60))}:${pad(Math.abs(m) % 60)}`;
 };
-export const TODAY = localDate(new Date());
+const wanted = new URLSearchParams(window.location.search).get("date");
+export const TODAY = /^\d{4}-\d{2}-\d{2}$/.test(wanted || "") ? wanted : localDate(new Date());
 const D = TODAY;
-const Z = offsetOf(new Date());
+const Z = offsetOf(new Date(`${D}T12:00:00`));
 const at = (t) => `${D}T${t}:00${Z}`;
 
 /* ---- taxonomy --------------------------------------------------------
@@ -1086,19 +1087,41 @@ function fromFeed(e) {
   };
 }
 
-/* Resolves to { events, feed }, where feed says whether these are live. */
+/* Resolves to { events, feed }, where feed says whether these are live.
+   A thin live day (a Sunday with four Ticketmaster listings, all an hour
+   away) must not replace the whole sample set with nothing usable, so
+   below a floor of reachable listings the samples stay in alongside the
+   live ones, and the note says exactly that. */
+const USABLE_FLOOR = 8;
+
 export async function loadEvents() {
   if (!USE_API) return SAMPLE_FEED("Sample listings.");
   try {
     const r = await fetch(`${API_URL}?date=${D}`, { headers: { Accept: "application/json" } });
     if (!r.ok) throw new Error(`events ${r.status}`);
     const j = await r.json();
-    const events = (Array.isArray(j) ? j : j.events || []).map(fromFeed);
-    if (!events.length) {
+    const live = (Array.isArray(j) ? j : j.events || []).map(fromFeed);
+    const from = (j.sources || []).join(" and ");
+    const usable = live.filter((e) => e.travelMinutes <= 60).length;
+
+    if (usable >= USABLE_FLOOR) {
+      return { events: live, feed: { live: true, note: `Live listings for today${from ? ` from ${from}` : ""}.` } };
+    }
+    if (!live.length) {
       return SAMPLE_FEED("The live feed has nothing on for today, so these are sample listings.");
     }
-    const from = (j.sources || []).join(" and ");
-    return { events, feed: { live: true, note: `Live listings for today${from ? ` from ${from}` : ""}.` } };
+    const ids = new Set(live.map((e) => String(e.id)));
+    const events = [...live, ...SEED_EVENTS.filter((e) => !ids.has(String(e.id)))];
+    const n = live.length;
+    return {
+      events,
+      feed: {
+        live: true,
+        thin: true,
+        note: `${n} live listing${n === 1 ? "" : "s"} today${from ? ` from ${from}` : ""}, ` +
+          "shown alongside sample listings because the live feed is thin."
+      }
+    };
   } catch (err) {
     return SAMPLE_FEED("The listings server is not running, so these are sample listings.");
   }

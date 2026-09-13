@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loo Loop, circles</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/tokens.css?v=10">
+<link rel="stylesheet" href="css/app.css?v=10">
+</head>
+<body>
+  <div class="shell is-page">
+    <aside class="side">
+      <div class="side-top">
+        <p class="wordmark wordmark-deep"><a href="./">Loo Loop</a></p>
+        <nav class="side-nav" aria-label="Pages">
+          <a href="./">What's on</a>
+          <a href="circles.html" class="is-here">Circles</a>
+          <a href="profile.html" id="nav-profile">Profile</a>
+        </nav>
+      </div>
+      <div class="side-body">
+        <p class="step-count">Circles</p>
+        <h1 class="step-q">Who's going?</h1>
+        <p class="step-hint" id="standfirst">A circle is the people going to the same thing. Join one and see who else is in.</p>
+
+        <div class="nowbox" aria-label="Who's going">
+          <h2 class="answers-h">Who's going</h2>
+          <p class="now-time" id="detail-name">Pick a circle you're in</p>
+          <p class="now-weather" id="detail-when"></p>
+          <ul class="members" id="members"></ul>
+          <p class="members-empty" id="members-note"></p>
+          <a class="link link-deep" id="detail-link" target="_blank" rel="noreferrer" hidden>Event details</a>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section class="main-results">
+        <div class="cards-head cards-head-first">
+          <h2 class="cards-h" id="circles-h">Open circles</h2>
+          <p class="cards-sub" id="circles-sub">Loading.</p>
+        </div>
+        <div class="cards" id="circles"></div>
+        <p class="empty" id="circles-empty" hidden>No circles yet. The first person to join an event starts one.</p>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="js/circles.js?v=10"></script>
+</body>
+</html>

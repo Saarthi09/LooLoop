@@ -3,7 +3,7 @@
   --paper:   #EFF1EC;   /* page, a cool grey-green */
   --paper-2: #E1E5DC;   /* recessed surfaces, the radial canvas field */
   --surface: #FBFCFA;   /* card faces */
-  --deep:    #0E2321;   /* deep green-black, the question panel and the pick */
+  --deep:    #0E2321;   /* deep green-black, the side panel on every page */
   --deep-2:  #17332F;   /* raised block inside a deep panel */
   --on-deep: #E7EEE7;   /* text on deep surfaces */
   --on-deep-2: #9DB1AB; /* secondary text on deep surfaces */

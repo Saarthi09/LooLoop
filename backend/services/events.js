@@ -51,11 +51,11 @@ const CAMPUS_PLACES = [
 const TAG_RULES = [
   ["ai-ml", /\bai\b|machine learning|artificial intelligence|neural|\bllm|data science/i],
   ["research", /research|thesis|defen[cs]e|colloquium|symposium|graduate studies/i],
-  ["startups", /startup|entrepreneur|velocity|founder|pitch|innovation|venture/i],
+  ["startups", /startup|entrepreneur|velocity|founder|pitch (competition|night|event)|elevator pitch|innovation|venture/i],
   ["career", /career|co-?op\b|resume|interview|networking|employer|job fair|recruit/i],
   ["tech", /\btech|software|coding|hackathon|engineering|computer|cybersecurity|robotic|programming/i],
   ["music", /music|concert|\bband\b|choir|jazz|orchestra|\bdj\b|karaoke|open mic|symphony/i],
-  ["sports", /sport|hockey|basketball|soccer|volleyball|badminton|swim|\brun\b|running|athletic|intramural|fitness|\bgym\b|climb|skat/i],
+  ["sports", /sport|hockey|basketball|baseball|blue jays|raptors|soccer|football|volleyball|badminton|swim|\brun\b|running|athletic|intramural|fitness|\bgym\b|climb|skat/i],
   ["arts", /\barts?\b|theatre|theater|\bfilm|cinema|gallery|exhibit|dance|drama|photograph|design|craft|pottery|comedy|improv/i],
   ["wellness", /wellness|health|mental|yoga|meditat|mindful|counsel|therap/i],
   ["outdoors", /outdoor|\bpark\b|trail|hik(e|ing)|garden|nature|sustainab|environment|\bbike|cycling/i],
@@ -90,9 +90,9 @@ export function localDateOf(value) {
   }).format(d);
 }
 
-function torontoOffsetMs(utc) {
+function offsetMs(utc, tz) {
   const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: TZ,
+    timeZone: tz,
     hourCycle: "h23",
     year: "numeric",
     month: "2-digit",
@@ -108,6 +108,22 @@ function torontoOffsetMs(utc) {
   );
 }
 
+const torontoOffsetMs = (utc) => offsetMs(utc, TZ);
+
+/* A wall-clock time in a named zone, as a UTC ISO string. The offset is
+   read at the guessed instant, which is right except inside the hour a
+   clock change skips or repeats. */
+export function zonedToUtc([y, mo, d, h = 0, mi = 0, sec = 0], tz = TZ) {
+  const guess = Date.UTC(y, mo - 1, d, h, mi, sec);
+  let offset;
+  try {
+    offset = offsetMs(new Date(guess), tz);
+  } catch (err) {
+    offset = offsetMs(new Date(guess), TZ); /* an unknown zone name */
+  }
+  return new Date(guess - offset).toISOString();
+}
+
 /* Midnight to midnight in Toronto for a calendar day, as UTC instants. */
 export function torontoDayRange(date) {
   const offset = torontoOffsetMs(new Date(`${date}T12:00:00Z`));
@@ -120,6 +136,12 @@ export const stamp = (d) => d.toISOString().replace(/\.\d{3}Z$/, "Z");
 
 const plusMinutes = (iso, minutes) =>
   new Date(new Date(iso).getTime() + minutes * 60000).toISOString();
+
+/* Waterloo Events sends UTC instants with no zone marker ("2026-09-13T20:00:00").
+   Left alone, JavaScript would read that as local time, four hours out. */
+const asUtc = (s) => (/(?:[+-]\d{2}:\d{2}|Z)$/.test(s) ? s : `${s}Z`);
+
+const hoursBetween = (a, b) => (new Date(b) - new Date(a)) / 3600000;
 
 /* ---- geography ------------------------------------------------------- */
 
@@ -178,6 +200,9 @@ function circumstancesFor({ text, price, scope, studentPrice }) {
   if (scope !== "any") list.push("transit-reachable");
   return list;
 }
+
+/* Provider links go straight into an href, so only web URLs pass. */
+const safeUrl = (value) => (/^https?:\/\//i.test(String(value || "")) ? String(value) : null);
 
 const costTierFor = (price) =>
   price == null ? "any" : price === 0 ? "free" : price < 10 ? "cheap" : price < 25 ? "moderate" : "any";
@@ -244,15 +269,15 @@ export function normalizeTicketmaster(event) {
     tags: tagsFor(text, TM_SEGMENTS[segment]),
     circumstances: circumstancesFor({ text, price, scope, studentPrice: false }),
     goingCount: 0,
-    source: { name: "Ticketmaster", url: event.url || null },
-    imageUrl: image?.url || null,
+    source: { name: "Ticketmaster", url: safeUrl(event.url) },
+    imageUrl: safeUrl(image?.url),
     description: plainText(event.info || event.pleaseNote || genre),
   };
 }
 
 export function normalizeWaterloo(event) {
-  const startsAt = event.eventStartDate;
-  if (!startsAt) return null;
+  if (!event.eventStartDate) return null;
+  const startsAt = asUtc(event.eventStartDate);
   const point = campusPoint(event.locationName);
   const { price, studentPrice } = parseCost(event.cost);
   const text = [event.title, event.eventTags, event.eventType, event.audience, event.host, plainText(event.content, 400)]
@@ -260,12 +285,14 @@ export function normalizeWaterloo(event) {
     .join(" ");
   const scope = "campus";
   const endsAt =
-    event.eventEndDate && new Date(event.eventEndDate) > new Date(startsAt)
-      ? event.eventEndDate
+    event.eventEndDate && new Date(asUtc(event.eventEndDate)) > new Date(startsAt)
+      ? asUtc(event.eventEndDate)
       : plusMinutes(startsAt, 90);
+  /* An all-day or multi-day listing has no start time to plan around. */
+  if (hoursBetween(startsAt, endsAt) >= 20) return null;
 
   return {
-    id: `uw-${event.uniqueKey || event.siteId}-${startsAt}`,
+    id: `uw-${event.uniqueKey || event.siteId}-${event.eventStartDate}`,
     title: event.title || "Untitled event",
     venue: event.locationName || event.host || "University of Waterloo",
     startsAt,
@@ -281,20 +308,91 @@ export function normalizeWaterloo(event) {
     tags: tagsFor(text),
     circumstances: circumstancesFor({ text, price, scope, studentPrice }),
     goingCount: 0,
-    source: { name: "Waterloo Events", url: event.eventWebsite || event.itemUri || null },
+    source: { name: "Waterloo Events", url: safeUrl(event.eventWebsite) || safeUrl(event.itemUri) },
     imageUrl: null,
     description: plainText(event.content),
+  };
+}
+
+/* Where a WUSA trip goes when the calendar names a city but no GEO. */
+const CITY_POINTS = [
+  [/toronto|rogers centre|scotiabank arena/i, { lat: 43.6532, lng: -79.3832 }, "Toronto"],
+  [/hamilton/i, { lat: 43.2557, lng: -79.8711 }, "Hamilton"],
+  [/guelph/i, { lat: 43.5448, lng: -80.2482 }, "Guelph"],
+  [/cambridge/i, { lat: 43.3616, lng: -80.3144 }, "Cambridge"],
+  [/kitchener/i, { lat: 43.4516, lng: -80.4925 }, "Kitchener"],
+];
+
+/* "Free", "free event", "$5", "$10 for non-members"; plain "free food"
+   says nothing about the ticket. */
+function priceFromText(text) {
+  const s = String(text || "");
+  const amounts = [...s.matchAll(/\$\s?(\d+(?:\.\d{1,2})?)/g)].map((m) => Number(m[1]));
+  if (amounts.length) {
+    return { price: Math.min(...amounts), studentPrice: /student|member/i.test(s) && amounts.length > 1 };
+  }
+  if (/\bfree\b(?!\s+(food|pizza|snacks?|lunch|dinner|breakfast|drinks?|coffee|swag|merch|stuff))/i.test(s)) {
+    return { price: 0, studentPrice: false };
+  }
+  return { price: null, studentPrice: false };
+}
+
+export function normalizeWusa(event) {
+  if (!event.startsAt) return null;
+  const endsAt =
+    event.endsAt && new Date(event.endsAt) > new Date(event.startsAt)
+      ? event.endsAt
+      : plusMinutes(event.startsAt, 120);
+  if (hoursBetween(event.startsAt, endsAt) >= 20) return null;
+
+  const city = CITY_POINTS.find(([re]) => re.test(event.location || ""));
+  const onCampus = !city || /university of waterloo|\buw\b|waterloo, n2l/i.test(event.location || "");
+  const point =
+    event.lat != null && event.lng != null
+      ? { lat: event.lat, lng: event.lng }
+      : onCampus
+        ? campusPoint(event.location)
+        : city[1];
+  const scope = scopeFor(point, city?.[2] || "Waterloo");
+  const firstPlace = (event.location || "").split(",")[0].trim();
+  const venue = [firstPlace || "Campus", !onCampus && city ? city[2] : null].filter(Boolean).join(", ");
+  const text = [event.summary, event.categories.join(" "), event.organizer, event.description]
+    .filter(Boolean)
+    .join(" ");
+  const { price, studentPrice } = priceFromText(`${event.summary} ${event.description}`);
+
+  return {
+    id: `wusa-${event.uid || event.url}-${event.startsAt}`,
+    title: event.summary || "Untitled event",
+    venue,
+    startsAt: event.startsAt,
+    endsAt,
+    lat: point.lat,
+    lng: point.lng,
+    ...travelFrom(ORIGIN, point),
+    price,
+    currency: "CAD",
+    costTier: costTierFor(price),
+    scope,
+    setting: OUTDOOR.test(`${event.summary} ${event.location || ""}`) ? "outdoor" : "indoor",
+    tags: tagsFor(text),
+    circumstances: circumstancesFor({ text, price, scope, studentPrice }),
+    goingCount: 0,
+    source: { name: "WUSA", url: safeUrl(event.url) },
+    imageUrl: null,
+    description: plainText(event.description),
   };
 }
 
 /* ---- the feed -------------------------------------------------------- */
 
 /* circles: Map of event id to how many students have joined its circle. */
-export function buildFeed({ date, ticketmaster = [], waterloo = [], circles = new Map() }) {
+export function buildFeed({ date, ticketmaster = [], waterloo = [], wusa = [], circles = new Map() }) {
   const seen = new Set();
   return [
-    ...ticketmaster.map(normalizeTicketmaster),
+    ...wusa.map(normalizeWusa),
     ...waterloo.map(normalizeWaterloo),
+    ...ticketmaster.map(normalizeTicketmaster),
   ]
     .filter((e) => e && localDateOf(e.startsAt) === date)
     .filter((e) => (seen.has(e.id) ? false : seen.add(e.id)))

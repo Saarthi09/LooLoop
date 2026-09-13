@@ -12,11 +12,14 @@ import {
   stamp,
   torontoDayRange,
 } from "./services/events.js";
+import { fetchWusaEvents } from "./services/wusa.js";
 
 const app = express();
 const here = path.dirname(fileURLToPath(import.meta.url));
 const rootPath = path.join(here, "..");
-const legacyPath = path.join(rootPath, "first");
+// The pages a browser may ask for by name. Everything else at the root
+// (backend/, package.json, .git) stays private.
+const pages = ["index.html", "profile.html", "circles.html"];
 dotenv.config({ path: path.join(here, ".env") });
 const port = process.env.PORT || 3000;
 const ticketmasterKey = process.env.TICKETMASTER_API_KEY;
@@ -24,16 +27,19 @@ const uWaterlooKey = process.env.UWATERLOO_API_KEY;
 const geminiKey = process.env.GEMINI_API_KEY;
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
+// How far from uptown Waterloo the /api/events feed looks for listings.
+// Ticketmaster rarely has anything within the city on a given day, so the
+// default reaches Guelph, Cambridge and Hamilton; the front-end still
+// ranks by travel time, so far things sort last or get ruled out.
+const eventsRadiusKm = Number(process.env.EVENTS_RADIUS_KM) || 60;
 
 app.use(cors());
 app.use(express.json());
 
-// The radial front-end at the repo root is the front door. The earlier
-// pages in first/ (questionnaire, profile, circles) stay under /first.
-// Only the folders a browser needs are exposed; backend/ never is.
+// The front-end lives at the repo root: index.html, profile.html and
+// circles.html with css/ and js/. Only those are exposed; backend/ never is.
 app.use("/css", express.static(path.join(rootPath, "css")));
 app.use("/js", express.static(path.join(rootPath, "js")));
-app.use("/first", express.static(legacyPath));
 
 function getSize(value) {
   return Math.min(Math.max(Number(value) || 12, 1), 25);
@@ -291,10 +297,10 @@ async function getCircleCounts() {
   );
 }
 
-// One day of listings in the shape the radial front-end reads.
-// Waterloo Region only: Ticketmaster within 30 km of uptown, plus every
-// campus event Waterloo Events publishes. Missing providers are reported
-// in `warnings` rather than failing the whole feed.
+// One day of listings in the shape the radial front-end reads: the WUSA
+// calendar, Waterloo Events, and Ticketmaster around the region. A
+// provider that fails is reported in `warnings` rather than failing the
+// whole feed, and `sources` names only the providers that contributed.
 app.get("/api/events", async (req, res) => {
   const date = isDateString(req.query.date)
     ? req.query.date
@@ -303,7 +309,7 @@ app.get("/api/events", async (req, res) => {
   const ticketmasterRequest = {
     query: {
       latlong: "43.4643,-80.5204",
-      radius: "30",
+      radius: String(eventsRadiusKm),
       unit: "km",
       countryCode: "CA",
       startDateTime: stamp(start),
@@ -311,13 +317,17 @@ app.get("/api/events", async (req, res) => {
     },
   };
 
-  const [ticketmaster, waterloo, circles] = await Promise.allSettled([
+  const [wusa, ticketmaster, waterloo, circles] = await Promise.allSettled([
+    fetchWusaEvents(),
     getTicketmasterEvents(ticketmasterRequest, 100),
-    fetchWaterlooEvents(100),
+    fetchWaterlooEvents(25), // the API's documented maximum
     getCircleCounts(),
   ]);
 
   const warnings = [];
+  if (wusa.status === "rejected") {
+    warnings.push(`WUSA: ${wusa.reason.message}`);
+  }
   if (ticketmaster.status === "rejected") {
     warnings.push(`Ticketmaster: ${ticketmaster.reason.message}`);
   }
@@ -330,14 +340,12 @@ app.get("/api/events", async (req, res) => {
 
   const events = buildFeed({
     date,
+    wusa: wusa.value || [],
     ticketmaster: ticketmaster.value || [],
     waterloo: waterloo.value || [],
     circles: circles.value || new Map(),
   });
-  const sources = [
-    ticketmasterKey && ticketmaster.status === "fulfilled" && "Ticketmaster",
-    uWaterlooKey && waterloo.status === "fulfilled" && "Waterloo Events",
-  ].filter(Boolean);
+  const sources = [...new Set(events.map((event) => event.source.name))];
 
   res.json({ date, events, sources, warnings });
 });
@@ -349,6 +357,7 @@ app.get("/api/health", (_req, res) => {
     uWaterlooConnected: Boolean(uWaterlooKey),
     geminiConnected: Boolean(geminiKey),
     profilesConnected: Boolean(supabaseUrl && supabaseSecretKey),
+    wusaCalendar: true,
   });
 });
 
@@ -769,8 +778,13 @@ app.post("/api/recommend", async (req, res) => {
   }
 });
 
-app.get(["/", "/index.html"], (_req, res) => {
+app.get("/", (_req, res) => {
   res.sendFile(path.join(rootPath, "index.html"));
+});
+
+app.get("/:page", (req, res, next) => {
+  if (!pages.includes(req.params.page)) return next();
+  res.sendFile(path.join(rootPath, req.params.page));
 });
 
 app.listen(port, () => {
