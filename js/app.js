@@ -1,9 +1,9 @@
 import {
   loadEvents, SEED_USER, estimateTravel, geocode, suggestPlaces, similarity, fetchForecast, SAMPLE_FORECAST,
   INTERESTS, CIRCUMSTANCES, BUDGETS, RANGES, MODES, ART_PALETTES, QUICK_PLACES, TODAY, WANTED_DATE, isCalendarDate
-} from "./data.js?v=23";
-import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js?v=23";
-import { session, api, profileUrl, webUrl, ANSWERS_KEY, clearAnswers } from "./api.js?v=23";
+} from "./data.js?v=24";
+import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js?v=24";
+import { session, api, profileUrl, webUrl, ANSWERS_KEY, clearAnswers } from "./api.js?v=24";
 
 /* Single state object. Every handler mutates state, then calls render(). */
 const state = {
@@ -23,6 +23,7 @@ const state = {
   geo: { busy: false, note: null },
   spanId: "evening",
   nowAuto: true,             // the clock, or a time the user scrubbed to
+  clockPinned: false,        // "use the clock" was chosen; no pretending until the window changes
   nowManual: 19,
   weather: null,             // { sample, hours } once fetched
   weatherBusy: false,
@@ -55,6 +56,12 @@ const has = (e, c) => e.circumstances.includes(c);
    events up and down the ranking and decide what is still catchable. */
 
 const isToday = () => state.date === TODAY;
+
+const daysFrom = (d, n) => {
+  const t = new Date(`${d}T12:00:00`);
+  t.setDate(t.getDate() + n);
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+};
 
 const fmtDate = (d) =>
   new Date(`${d}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
@@ -94,8 +101,8 @@ const hourOf = (iso) => {
   return d.getHours() + d.getMinutes() / 60;
 };
 
-const travelFor = (e) => {
-  const mode = state.filters.mode;
+const travelFor = (e, f = state.filters) => {
+  const mode = f.mode;
   if (mode && mode !== "auto") return estimateTravel(state.origin, e, mode) ?? e.travelMinutes;
   return state.travelSource === "feed" ? e.travelMinutes : (estimateTravel(state.origin, e) ?? e.travelMinutes);
 };
@@ -106,7 +113,7 @@ function decorate(events, f) {
     const h = hourOf(e.startsAt);
     let endHour = hourOf(e.endsAt);
     if (endHour < h) endHour += 24;   /* a live listing that runs past midnight */
-    const travel = travelFor(e);
+    const travel = travelFor(e, f);
     const duration = Math.max(0, endHour - h) * 60;
 
     /* When you would have to walk out of the door, and what is left of
@@ -760,7 +767,7 @@ const STEPS = [
     hint: "The gap between finishing work and wanting to sleep.",
     body: () => `
       <div class="times">
-        <label class="time"><span>Day</span><input type="date" id="w-date" min="${TODAY}" value="${state.date}"></label>
+        <label class="time"><span>Day</span><input type="date" id="w-date" min="${TODAY}" max="${daysFrom(TODAY, 15)}" value="${state.date}"></label>
         <label class="time"><span>From</span><input type="time" id="w-from" value="${toTimeValue(state.filters.windowStart)}"></label>
         <label class="time"><span>Until</span><input type="time" id="w-to" value="${toTimeValue(state.filters.windowEnd)}"></label>
       </div>`
@@ -909,7 +916,7 @@ function wireStep(s) {
   if (s.id === "time") {
     const day = el.stepBody.querySelector("#w-date");
     day.addEventListener("change", () => {
-      if (!isCalendarDate(day.value) || day.value < TODAY) { day.value = state.date; return; }
+      if (!isCalendarDate(day.value) || day.value < TODAY || day.value > daysFrom(TODAY, 15)) { day.value = state.date; return; }
       if (day.value === state.date) return;
       state.date = day.value;
       state.weather = null;
@@ -924,6 +931,7 @@ function wireStep(s) {
       if (v == null) return;
       state.filters.windowStart = Math.min(v, state.filters.windowEnd - 0.25);
       fitSpan();
+      state.clockPinned = false;
       if (state.clockFallback || state.nowAuto) pickClock();
       updateStep();
     });
@@ -932,6 +940,7 @@ function wireStep(s) {
       if (v == null) return;
       state.filters.windowEnd = Math.max(v, state.filters.windowStart + 0.25);
       fitSpan();
+      state.clockPinned = false;
       if (state.clockFallback || state.nowAuto) pickClock();
       updateStep();
     });
@@ -974,6 +983,8 @@ function updateStep() {
     d.classList.toggle("is-done", i < state.step);
   });
 }
+
+const rangeFor = (min) => (RANGES.find((x) => x.minutes === min) || {}).id || null;
 
 function setRange(id) {
   state.filters.range = id;
@@ -1056,6 +1067,7 @@ function loadAnswers() {
     const j = JSON.parse(localStorage.getItem(ANSWERS_KEY) || "null");
     if (!j || !j.filters) return false;
     state.filters = { ...state.filters, ...j.filters };
+    if (!RANGES.some((x) => x.id === state.filters.range)) state.filters.range = rangeFor(state.filters.maxTravel);
     if (j.origin && Number.isFinite(j.origin.lat)) state.origin = j.origin;
     if (!WANTED_DATE && isCalendarDate(j.date) && j.date >= TODAY) state.date = j.date;
     if (j.travelSource) state.travelSource = j.travelSource;
@@ -1074,7 +1086,7 @@ function loadAnswers() {
    or choosing "use the clock" takes over from this. */
 
 function pickClock() {
-  if (!isToday()) {
+  if (!isToday() || state.clockPinned) {
     state.clockFallback = false;
     state.nowAuto = true;
     return;
@@ -1508,6 +1520,7 @@ function mountRail() {
   rail.nowRange.addEventListener("input", () => {
     state.nowAuto = false;
     state.clockFallback = false;
+    state.clockPinned = false;
     state.nowManual = Number(rail.nowRange.value);
     state.reflow = "live";
     render();
@@ -1516,6 +1529,7 @@ function mountRail() {
   rail.nowReset.addEventListener("click", () => {
     state.nowAuto = true;
     state.clockFallback = false;
+    state.clockPinned = true;
     state.reflow = "stagger";
     render();
   });
@@ -1533,18 +1547,21 @@ function mountRail() {
 
   rail.winStart.addEventListener("input", () => {
     state.filters.windowStart = Math.min(Number(rail.winStart.value), state.filters.windowEnd - 0.25);
+    state.clockPinned = false;
     if (state.clockFallback || state.nowAuto) pickClock();
     state.reflow = "live";
     render();
   });
   rail.winEnd.addEventListener("input", () => {
     state.filters.windowEnd = Math.max(Number(rail.winEnd.value), state.filters.windowStart + 0.25);
+    state.clockPinned = false;
     if (state.clockFallback || state.nowAuto) pickClock();
     state.reflow = "live";
     render();
   });
   rail.travel.addEventListener("input", () => {
     state.filters.maxTravel = Number(rail.travel.value);
+    state.filters.range = rangeFor(state.filters.maxTravel);
     state.reflow = "live";
     render();
   });
@@ -1572,9 +1589,11 @@ function updateRail(items) {
   const w = weatherAt(mid);
   rail.nowWeather.textContent = !forecast()
     ? "Checking the forecast."
-    : `${Math.round(w?.temp ?? 0)} degrees, ${w?.rain ?? 0}% chance of rain around ${fmtClock(Math.floor(mid))}` +
-      (forecast().sample ? ", from a sample forecast" : "");
-  rail.nowEffect.textContent = weatherEffect(w);
+    : forecast().unavailable
+      ? `No forecast yet for ${fmtDate(state.date)}, so the weather is not in the ranking.`
+      : `${Math.round(w?.temp ?? 0)} degrees, ${w?.rain ?? 0}% chance of rain around ${fmtClock(Math.floor(mid))}` +
+        (forecast().sample ? ", from a sample forecast" : "");
+  rail.nowEffect.textContent = forecast()?.unavailable ? "" : weatherEffect(w);
   rail.nowRain.textContent = state.forceRain
     ? "back to the real forecast"
     : "see it with rain";
@@ -1597,7 +1616,7 @@ function updateRail(items) {
     ["Into", intoLabels.length ? esc(intoLabels.join(", ")) : "anything", 1],
     ["Spend", esc(labelOf(BUDGETS, f.budget)), 2],
     ["Free", `${fmtClock(f.windowStart)} to ${fmtClock(f.windowEnd)}`, 3],
-    ["Range", esc(labelOf(RANGES, f.range)), 4],
+    ["Range", f.range ? esc(labelOf(RANGES, f.range)) : `within ${f.maxTravel} minutes`, 4],
     ["By", esc(labelOf(MODES, f.mode)), 4],
     ["Needs", needLabels.length ? esc(needLabels.join(", ")) : "nothing in particular", 5]
   ].map(([k, v, step]) => `<div class="answer">
@@ -1654,7 +1673,14 @@ function renderCards(items) {
     : "";
   const rest = ruled.map((e) => cardHTML(e, false)).join("");
 
+  /* A re-render must not tear down a map the user is looking at: the
+     mounted iframe is kept when the new one would load the same place. */
+  const keep = state.selectedId
+    ? el.cards.querySelector(`.card[data-id="${CSS.escape(String(state.selectedId))}"] .card-map iframe`)
+    : null;
   el.cards.innerHTML = cards + restHead + rest;
+  const fresh = keep && el.cards.querySelector(".card.is-sel .card-map iframe");
+  if (fresh && fresh.src === keep.src) fresh.replaceWith(keep);
 }
 
 function urgentFlag(e) {
@@ -1822,6 +1848,7 @@ function startOver() {
   state.geo = { busy: false, note: null };
   state.weather = null;
   state.forceRain = false;
+  state.clockPinned = false;
   state.date = TODAY;
   state.spanId = "evening";
   state.selectedId = null;
@@ -1983,9 +2010,15 @@ window.addEventListener("resize", renderTip);
 
 /* The clock keeps time while the page sits open: every half minute the
    real clock is re-read, the fallback re-judged, and the ranking redone. */
+let lastTickMinute = -1;
 setInterval(() => {
   if (state.status !== "ready" || state.screen !== "results") return;
   if (!state.nowAuto && !state.clockFallback) return;   /* a scrubbed clock stays put */
+  if (!isToday()) return;                               /* another day: nothing moves */
+  if (state.selectedId) return;                         /* a card with its map open is left alone */
   pickClock();
+  const minute = Math.floor(nowHour() * 60);
+  if (minute === lastTickMinute) return;                /* same minute, same ranking */
+  lastTickMinute = minute;
   render();
 }, 30000);

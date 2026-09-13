@@ -4,7 +4,7 @@
    plain static server (Live Server, python -m http.server) the API is on
    port 3000 instead. When it cannot be reached, or has nothing on for
    today, the seed set below stands in and is labelled as a sample. */
-import { API_BASE } from "./api.js?v=23";
+import { API_BASE } from "./api.js?v=24";
 
 export const USE_API = true;
 export const API_URL = `${API_BASE}/api/events`;
@@ -1346,7 +1346,7 @@ export const SAMPLE_FORECAST = {
 export async function fetchForecast(origin, date = TODAY) {
   const day = isCalendarDate(date) ? date : TODAY;
   const url = `${WEATHER_URL}?latitude=${origin.lat.toFixed(4)}&longitude=${origin.lng.toFixed(4)}` +
-    `&hourly=temperature_2m,precipitation_probability&timezone=America%2FToronto&forecast_days=7`;
+    `&hourly=temperature_2m,precipitation_probability&timezone=America%2FToronto&forecast_days=16`;
   const r = await fetch(url);
   if (!r.ok) throw new Error(`weather ${r.status}`);
   const j = await r.json();
@@ -1360,6 +1360,8 @@ export async function fetchForecast(origin, date = TODAY) {
       rain: hourly.precipitation_probability?.[i] ?? 0
     };
   });
-  if (!Object.keys(hours).length) throw new Error("no hours for today");
+  /* A day past the forecast's reach is not a failed fetch: there is simply
+     no forecast yet, and the ranking goes on without one. */
+  if (!Object.keys(hours).length) return { sample: false, unavailable: true, hours: {} };
   return { sample: false, hours };
 }

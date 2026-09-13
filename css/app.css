@@ -1139,6 +1139,7 @@ body {
 
 @media (max-width: 1000px) {
   .card.is-lead { grid-column: span 1; }
+  .card.is-lead.is-sel { grid-column: 1 / -1; }
   .card.is-lead .card-art { aspect-ratio: 16 / 9; }
   .card.is-lead .card-title { font-size: 16px; }
 }

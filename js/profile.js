@@ -1,6 +1,6 @@
 import {
   session, saveSession, updateProfile, dropSession, api, safeNext, fmtWhen, esc, clearAnswers
-} from "./api.js?v=23";
+} from "./api.js?v=24";
 
 const el = {
   sideH: document.getElementById("side-h"),
