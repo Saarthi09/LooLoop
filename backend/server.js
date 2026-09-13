@@ -260,15 +260,26 @@ async function getTicketmasterEvents(req, size) {
     }
   }
 
-  const response = await fetch(url);
-  const payload = await response.json();
-  if (!response.ok) {
-    throw new Error(
-      payload.fault?.faultstring || "Ticketmaster request failed.",
-    );
+  // Ticketmaster pages its results, 200 at most per page. A busy day in a
+  // big city runs past one page, so keep asking until the last page or a
+  // sane ceiling, whichever comes first.
+  const events = [];
+  const maxPages = 5;
+  for (let pageNo = 0; pageNo < maxPages; pageNo += 1) {
+    url.searchParams.set("page", String(pageNo));
+    const response = await fetch(url);
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(
+        payload.fault?.faultstring || "Ticketmaster request failed.",
+      );
+    }
+    events.push(...(payload._embedded?.events || []));
+    const totalPages = Number(payload.page?.totalPages) || 1;
+    if (pageNo + 1 >= totalPages) break;
   }
 
-  return (payload._embedded?.events || []).map((event) => ({
+  return events.map((event) => ({
     ...event,
     source: "Ticketmaster",
   }));
@@ -340,7 +351,7 @@ app.get("/api/events", async (req, res) => {
 
   const [wusa, ticketmaster, waterloo, circles] = await Promise.allSettled([
     nearCampus ? fetchWusaEvents() : Promise.resolve([]),
-    getTicketmasterEvents(ticketmasterRequest, 100),
+    getTicketmasterEvents(ticketmasterRequest, 200),
     nearCampus ? fetchWaterlooEvents(25) : Promise.resolve([]), // the API's documented maximum
     getCircleCounts(),
   ]);

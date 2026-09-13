@@ -875,6 +875,18 @@ body {
 
 .cards-more { grid-column: 1 / -1; }
 
+/* The rest of the day, under the ones that fit. */
+.cards-rest-head {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 18px 0 2px 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--hair);
+}
+
 .show-more {
   width: 100%;
   padding: 10px;

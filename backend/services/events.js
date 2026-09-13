@@ -278,7 +278,10 @@ export function normalizeTicketmaster(event, origin = ORIGIN) {
     goingCount: 0,
     source: { name: "Ticketmaster", url: safeUrl(event.url) },
     imageUrl: safeUrl(image?.url),
-    description: plainText(event.info || event.pleaseNote || genre),
+    /* A genre is not a description, and Ticketmaster's placeholder genres
+       ("Undefined", "Other") would read as if they were. Nothing is
+       better than something invented. */
+    description: plainText(event.info || event.pleaseNote || ""),
   };
 }
 

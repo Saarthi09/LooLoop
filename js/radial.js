@@ -208,9 +208,23 @@ export function createRadial(root, { onSelect, onHover } = {}) {
     if (made) root.getBoundingClientRect();
   }
 
+  /* A listing that left the feed, because the origin moved, takes its dot
+     with it. Otherwise a stale dot stays drawn, and hoverable, on a chart
+     it no longer belongs to. */
+  function pruneDots(items) {
+    const keep = new Set(items.map((e) => e.id));
+    for (const [id, c] of dots) {
+      if (keep.has(id)) continue;
+      c.remove();
+      dots.delete(id);
+      if (activeId === id) activeId = null;
+    }
+  }
+
   /* view: { items, span, windowStart, windowEnd, maxTravel, originLabel, delay } */
   function update(view) {
     const span = view.span;
+    pruneDots(view.items);
     ensureDots(view.items);
     drawHours(span);
     order = view.items.map((e) => e.id);

@@ -1,9 +1,9 @@
 import {
   loadEvents, SEED_USER, estimateTravel, geocode, suggestPlaces, similarity, fetchForecast, SAMPLE_FORECAST,
   INTERESTS, CIRCUMSTANCES, BUDGETS, SCOPES, ART_PALETTES, QUICK_PLACES
-} from "./data.js";
-import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js";
-import { session, api, profileUrl, webUrl, ANSWERS_KEY, clearAnswers } from "./api.js";
+} from "./data.js?v=16";
+import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js?v=16";
+import { session, api, profileUrl, webUrl, ANSWERS_KEY, clearAnswers } from "./api.js?v=16";
 
 /* Single state object. Every handler mutates state, then calls render(). */
 const state = {
@@ -28,7 +28,6 @@ const state = {
   forceRain: false,          // show the ranking against a wet evening
   selectedId: null,
   hoverId: null,
-  showRuled: false,
   reflow: "stagger",         // stagger | live, set by the control that moved
   filters: {
     windowStart: 18.5,
@@ -267,12 +266,13 @@ function why(e) {
   if (e.over) return "already finished";
   if (!e.catchable) return "you'd miss it";
   if (state.filters.scope === "campus" && e.scope !== "campus") return "off campus";
-  if (e.price > budgetMax(state.filters.budget)) return "over budget";
+  if (e.price != null && e.price > budgetMax(state.filters.budget)) return "over budget";
   if (!e.passes) return "ruled out";
   if (!e.reachable) return "too far";
-  if (!e.inWindow) return "wrong time";
+  if (!e.inWindow) return e.hour < state.filters.windowStart ? "before your window" : "after your window";
   return "ruled out";
 }
+
 
 /* ---- compatibility with each answer -----------------------------------
    The percentage is one number; this is the same arithmetic opened up so
@@ -1375,12 +1375,6 @@ function mountResults() {
     <span class="key"><svg class="key-dot" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" class="is-out"></circle></svg>ruled out</span>`;
 
   el.cards.addEventListener("click", (ev) => {
-    const more = ev.target.closest("#show-ruled");
-    if (more) {
-      state.showRuled = !state.showRuled;
-      render();
-      return;
-    }
     const join = ev.target.closest("[data-join]");
     if (join) {
       const e = state.events.find((x) => String(x.id) === join.dataset.join);
@@ -1542,11 +1536,12 @@ function updateRail(items) {
     ? "back to the real forecast"
     : "see it with rain";
 
-  rail.count.textContent = shown.filter(isMatch).length;
-  const gone = shown.filter((e) => e.over).length;
-  rail.countNote.textContent = (s.start === 0 && s.end === 24
-    ? `fit somewhere in the day, out of ${shown.length}.`
-    : `fit between ${fmtClock(s.start)} and ${fmtClock(s.end)}, out of ${shown.length} on then.`) +
+  const fits = items.filter(isMatch);
+  const offAxis = fits.filter((e) => !inSpan(e)).length;
+  rail.count.textContent = fits.length;
+  const gone = items.filter((e) => e.over).length;
+  rail.countNote.textContent = `fit your answers, out of ${items.length} on today.` +
+    (offAxis ? ` ${offAxis} of them start outside the hours on the chart; All day shows them.` : "") +
     (gone ? ` ${gone} already finished.` : "");
   rail.feed.textContent = state.feed.note;
 
@@ -1588,10 +1583,13 @@ function weatherEffect(w) {
 
 /* ---- cards ----------------------------------------------------------- */
 
-function renderCards(shown) {
-  const matches = shown.filter(isMatch)
+/* Every listing for the day is on the page: the ones that fit first, then
+   everything else with the reason it does not. The chart's axis decides
+   what is drawn on the chart, not what is listed. */
+function renderCards(items) {
+  const matches = items.filter(isMatch)
     .sort((a, b) => matchPct(b) - matchPct(a) || rank(b) - rank(a));
-  const ruled = shown.filter((e) => !isMatch(e)).sort((a, b) => a.hour - b.hour);
+  const ruled = items.filter((e) => !isMatch(e)).sort((a, b) => a.hour - b.hour);
 
   el.cardsH.textContent = matches.length
     ? (matches.length === 1 ? "The one thing that fits" : `${matches.length} things that fit`)
@@ -1603,14 +1601,15 @@ function renderCards(shown) {
     : "Loosen one answer, or move the clock, and they come back.";
 
   const cards = matches.map((e, i) => cardHTML(e, i === 0)).join("");
-  const more = ruled.length
-    ? `<button type="button" class="show-more" id="show-ruled">
-        ${state.showRuled ? "Hide" : "Show"} the ${ruled.length} we ruled out
-       </button>`
+  const restHead = ruled.length
+    ? `<div class="cards-rest-head">
+        <h2 class="cards-h">${ruled.length === 1 ? "One more thing on today" : `${ruled.length} more things on today`}</h2>
+        <p class="cards-sub">Not for you as things stand. Each one says why. Change an answer and it may move up.</p>
+       </div>`
     : "";
-  const rest = state.showRuled ? ruled.map((e) => cardHTML(e, false)).join("") : "";
+  const rest = ruled.map((e) => cardHTML(e, false)).join("");
 
-  el.cards.innerHTML = cards + (more ? `<div class="cards-more">${more}</div>` : "") + rest;
+  el.cards.innerHTML = cards + restHead + rest;
 }
 
 function urgentFlag(e) {
@@ -1795,8 +1794,7 @@ function render() {
   }
 
   const items = decorate(state.events, state.filters);
-  const shown = items.filter(inSpan);
-  const matches = shown.filter(isMatch);
+  const matches = items.filter(isMatch);
 
   el.standfirst.textContent = state.selectedId
     ? describeSelected(items)
@@ -1825,7 +1823,7 @@ function render() {
     delay: delayFor(items)
   });
 
-  renderCards(shown);
+  renderCards(items);
   renderTip();
   updateRail(items);
 }
