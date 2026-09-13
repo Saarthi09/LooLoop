@@ -1,15 +1,37 @@
 :root {
-  --paper:   #E9EBE6;
-  --paper-2: #DDE0D9;
-  --ink:     #16191A;
-  --ink-2:   #5B625F;
-  --ink-3:   #8D948F;
-  --signal:  #2440E0;
-  --window:  #C8D4B8;
+  /* surfaces */
+  --paper:   #EFF1EC;   /* page, a cool grey-green */
+  --paper-2: #E1E5DC;   /* recessed surfaces, the radial canvas field */
+  --surface: #FBFCFA;   /* card faces */
+  --deep:    #0E2321;   /* deep green-black, the question panel and the pick */
+  --deep-2:  #17332F;   /* raised block inside a deep panel */
+  --on-deep: #E7EEE7;   /* text on deep surfaces */
+  --on-deep-2: #9DB1AB; /* secondary text on deep surfaces */
+
+  /* ink */
+  --ink:     #121615;
+  --ink-2:   #4F5957;
+  --ink-3:   #89928C;
+
+  /* meaning, not decoration */
+  --signal:  #2440E0;   /* reachable and in your window, and active controls */
+  --accent:  #FF5A2B;   /* how well it matches what you asked for, as a fill */
+  --accent-ink: #BE3410; /* the same idea as text on a light surface, 5.5:1 */
+  --window:  #C8D4B8;   /* the free-window wedge */
 
   /* 1px hairlines, used in place of shadows */
-  --hair:    rgba(22, 25, 26, 0.14);
-  --hair-2:  rgba(22, 25, 26, 0.24);
+  --hair:      rgba(18, 22, 21, 0.13);
+  --hair-2:    rgba(18, 22, 21, 0.24);
+  --hair-deep: rgba(231, 238, 231, 0.18);
+
+  /* event artwork, read from here so no hex lives outside this file */
+  --art-1: #2440E0;
+  --art-2: #FF5A2B;
+  --art-3: #0E2321;
+  --art-4: #C8D4B8;
+  --art-5: #F2C230;
+  --art-6: #1E9E8A;
+  --art-7: #E4E8DF;
 
   --r-sm: 3px;
   --r-lg: 14px;

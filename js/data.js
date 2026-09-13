@@ -1052,3 +1052,57 @@ function placeLabel(hit) {
     String(hit.display_name).split(",")[0].trim();
   return label.length > 38 ? `${label.slice(0, 37).trimEnd()}…` : label;
 }
+
+/* ---- how close one interest is to another ----------------------------
+   A match percentage that only counted exact tag hits would call a
+   machine learning reading group a 0% match for someone who picked
+   "tech". These are the pairs that are near enough to say so. Anything
+   unlisted falls back to BASE_SIMILARITY. */
+
+const BASE_SIMILARITY = 0.12;
+
+const NEAR = [
+  ["tech", "ai-ml", 0.85], ["tech", "startups", 0.65], ["tech", "research", 0.6],
+  ["tech", "academic", 0.55], ["tech", "career", 0.45], ["tech", "games", 0.3],
+  ["ai-ml", "research", 0.72], ["ai-ml", "academic", 0.5], ["ai-ml", "startups", 0.5],
+  ["ai-ml", "career", 0.35],
+  ["research", "academic", 0.8], ["research", "career", 0.3],
+  ["academic", "career", 0.5],
+  ["startups", "career", 0.7], ["startups", "social", 0.35],
+  ["arts", "music", 0.62], ["arts", "social", 0.35], ["arts", "academic", 0.3],
+  ["music", "social", 0.45],
+  ["sports", "wellness", 0.68], ["sports", "outdoors", 0.7], ["sports", "social", 0.35],
+  ["wellness", "outdoors", 0.55], ["wellness", "social", 0.3], ["wellness", "food", 0.3],
+  ["outdoors", "social", 0.35],
+  ["social", "food", 0.5], ["social", "games", 0.6],
+  ["food", "games", 0.3]
+];
+
+const SIM = new Map();
+for (const [a, b, v] of NEAR) {
+  SIM.set(`${a}|${b}`, v);
+  SIM.set(`${b}|${a}`, v);
+}
+
+export function similarity(a, b) {
+  if (a === b) return 1;
+  return SIM.get(`${a}|${b}`) ?? BASE_SIMILARITY;
+}
+
+/* Which artwork palette an event gets, by its leading interest. */
+export const ART_PALETTES = {
+  music:    ["art-2", "art-5", "art-3"],
+  sports:   ["art-1", "art-4", "art-7"],
+  tech:     ["art-3", "art-6", "art-4"],
+  "ai-ml":  ["art-3", "art-1", "art-6"],
+  career:   ["art-1", "art-7", "art-2"],
+  startups: ["art-2", "art-3", "art-5"],
+  arts:     ["art-5", "art-3", "art-2"],
+  academic: ["art-6", "art-7", "art-3"],
+  research: ["art-6", "art-1", "art-7"],
+  social:   ["art-2", "art-4", "art-1"],
+  wellness: ["art-4", "art-6", "art-3"],
+  outdoors: ["art-4", "art-3", "art-5"],
+  food:     ["art-5", "art-2", "art-4"],
+  games:    ["art-1", "art-5", "art-7"]
+};

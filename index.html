@@ -11,46 +11,60 @@
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-  <header class="topbar">
-    <h1 class="wordmark">Loo Loop</h1>
-    <p class="standfirst" id="standfirst">Loading what's on around Waterloo.</p>
-    <button type="button" class="link topbar-link" id="edit-prefs" hidden>Change answers</button>
-  </header>
-
-  <main>
-    <section class="setup" id="setup" hidden>
-      <div class="setup-intro">
-        <h2 class="setup-h">Tonight, near you, in the time you actually have.</h2>
-        <p class="setup-p">Five questions. Nothing is saved and you can change any of it afterwards.</p>
+  <!-- one question at a time -->
+  <div class="wizard" id="wizard" hidden>
+    <aside class="wizard-side">
+      <p class="wordmark wordmark-deep">Loo Loop</p>
+      <p class="step-count" id="step-count"></p>
+      <h1 class="step-q" id="step-q"></h1>
+      <p class="step-hint" id="step-hint"></p>
+      <div class="step-live">
+        <p class="step-live-n" id="step-live-n">0</p>
+        <p class="step-live-t" id="step-live-t"></p>
       </div>
-      <form class="setup-form" id="setup-form"></form>
+      <div class="step-dots" id="step-dots" aria-hidden="true"></div>
+    </aside>
+
+    <section class="wizard-main">
+      <div class="step-body" id="step-body"></div>
+      <div class="step-nav">
+        <button type="button" class="btn" id="step-back">Back</button>
+        <button type="button" class="btn btn-go" id="step-next">Next</button>
+        <button type="button" class="link" id="step-skip">Skip to results</button>
+      </div>
     </section>
+  </div>
 
-    <div class="results" id="results" hidden>
-      <div class="frame">
-        <section class="stage">
-          <div class="toolbar">
-            <div class="switch" id="views" role="group" aria-label="View"></div>
-            <div class="switch" id="spans" role="group" aria-label="Hours shown"></div>
-          </div>
+  <!-- everything at once -->
+  <div class="results" id="results" hidden>
+    <header class="topbar">
+      <p class="wordmark">Loo Loop</p>
+      <p class="standfirst" id="standfirst"></p>
+    </header>
 
-          <div class="pick" id="pick" hidden></div>
-
-          <div class="canvas-wrap" id="canvas-wrap">
-            <svg class="radial" id="radial" role="group" aria-label="What's on, arranged by start time and travel time"></svg>
-            <div class="tip" id="tip" aria-hidden="true" hidden></div>
-          </div>
-
-          <div class="list" id="list" hidden></div>
-
-          <p class="empty" id="empty" hidden>Nothing fits that window. Try widening the time, the travel distance, or what you'll spend.</p>
+    <main class="frame">
+      <section class="stage">
+        <div class="toolbar">
+          <div class="switch" id="spans" role="group" aria-label="Hours shown"></div>
           <p class="legend" id="legend"></p>
-        </section>
+        </div>
 
-        <aside class="rail" id="rail" aria-label="Filters"></aside>
-      </div>
-    </div>
-  </main>
+        <div class="canvas-wrap" id="canvas-wrap">
+          <svg class="radial" id="radial" role="group" aria-label="What's on, arranged by start time and travel time"></svg>
+          <div class="tip" id="tip" aria-hidden="true" hidden></div>
+        </div>
+
+        <div class="cards-head">
+          <h2 class="cards-h" id="cards-h">What fits</h2>
+          <p class="cards-sub" id="cards-sub"></p>
+        </div>
+        <div class="cards" id="cards"></div>
+        <p class="empty" id="empty" hidden>Nothing fits that window. Widen the time, the distance, or what you'll spend.</p>
+      </section>
+
+      <aside class="rail" id="rail" aria-label="Your answers"></aside>
+    </main>
+  </div>
 
   <script type="module" src="js/app.js"></script>
 </body>

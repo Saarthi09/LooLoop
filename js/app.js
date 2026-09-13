@@ -1,6 +1,6 @@
 import {
-  loadEvents, SEED_USER, estimateTravel, geocode,
-  INTERESTS, CIRCUMSTANCES, BUDGETS, SCOPES
+  loadEvents, SEED_USER, estimateTravel, geocode, similarity,
+  INTERESTS, CIRCUMSTANCES, BUDGETS, SCOPES, ART_PALETTES
 } from "./data.js";
 import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js";
 
@@ -9,15 +9,15 @@ const state = {
   status: "loading",
   error: null,
   events: [],
-  screen: "setup",           // setup | results
+  screen: "wizard",          // wizard | results
+  step: 0,
   origin: { ...SEED_USER.origin },
   travelSource: "feed",      // feed | estimated
   geo: { busy: false, note: null },
-  view: "radial",            // radial | list
   spanId: "evening",
   selectedId: null,
   hoverId: null,
-  pickIndex: 0,
+  showRuled: false,
   reflow: "stagger",         // stagger | live, set by the control that moved
   filters: {
     windowStart: 18.5,
@@ -34,6 +34,8 @@ const span = () => SPANS[state.spanId];
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const budgetMax = (id) => (BUDGETS.find((b) => b.id === id) || BUDGETS[3]).max;
 const labelOf = (list, id) => (list.find((x) => x.id === id) || {}).label || id;
+const toggled = (list, v) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+const has = (e, c) => e.circumstances.includes(c);
 
 /* ---- derived --------------------------------------------------------- */
 
@@ -62,7 +64,6 @@ function decorate(events, f) {
       inWindow: h >= f.windowStart && h <= f.windowEnd,
       reachable: travel <= f.maxTravel,
       passes: f.circumstances.every((c) => e.circumstances.includes(c)) &&
-        (f.interests.length === 0 || f.interests.some((t) => e.tags.includes(t))) &&
         e.price <= budgetMax(f.budget) &&
         (f.scope !== "campus" || e.scope === "campus")
     };
@@ -73,29 +74,90 @@ const isMatch = (e) => e.passes && e.inWindow && e.reachable;
 const inSpan = (e) => e.hour >= span().start && e.hour <= span().end;
 
 const countWith = (f) => decorate(state.events, f)
-  .filter((e) => isMatch(e) && (state.screen === "setup" || inSpan(e))).length;
+  .filter((e) => isMatch(e) && (state.screen === "wizard" || inSpan(e))).length;
 const withPatch = (patch) => ({ ...state.filters, ...patch });
-const toggled = (list, v) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
-const has = (e, c) => e.circumstances.includes(c);
-
-/* How many listings would survive if this chip were the chosen answer.
-   The same number does the work on the setup screen and in the rail. */
 function chipCount(kind, value, on) {
   const f = state.filters;
+  /* Interests score rather than filter, so "how many would survive" is
+     always the same number. Count what is actually close to them instead. */
+  if (kind === "tag") {
+    return decorate(state.events, f)
+      .filter((e) => isMatch(e) && (state.screen === "wizard" || inSpan(e)))
+      .filter((e) => e.tags.some((t) => similarity(value, t) >= 0.5))
+      .length;
+  }
   const patch = kind === "budget" ? { budget: value }
     : kind === "scope" ? { scope: value, maxTravel: (SCOPES.find((x) => x.id === value) || {}).minutes }
-      : kind === "circ" ? { circumstances: on ? f.circumstances : [...f.circumstances, value] }
-        : { interests: on ? f.interests : [...f.interests, value] };
+      : { circumstances: on ? f.circumstances : [...f.circumstances, value] };
   return countWith(withPatch(patch));
 }
 
-function costLine(e) {
-  if (e.price === 0) return "Free";
-  return has(e, "student-price") ? `$${e.price} student` : `$${e.price}`;
+/* ---- how well this answers what was asked for ------------------------ */
+
+function interestFit(e) {
+  const want = state.filters.interests;
+  let best = 0, near = 0;
+  for (const w of want) {
+    let s = 0;
+    for (const t of e.tags) s = Math.max(s, similarity(w, t));
+    best = Math.max(best, s);
+    if (s >= 0.5) near++;
+  }
+  /* Mostly the closest single hit, partly how much of the ask it covers. */
+  return 0.8 * best + 0.2 * (near / want.length);
 }
 
-/* The short sentence that says why this is a sensible thing to do. */
+function timeFit(e) {
+  if (e.inWindow) return 1;
+  const f = state.filters;
+  const out = e.hour < f.windowStart ? f.windowStart - e.hour : e.hour - f.windowEnd;
+  return Math.max(0, 1 - out / 3);
+}
+
+const travelFit = (e) =>
+  Math.max(0, 1 - (e.travelMinutes / Math.max(1, state.filters.maxTravel)) * 0.85);
+
+function moneyFit(e) {
+  if (e.price === 0) return 1;
+  const cap = budgetMax(state.filters.budget);
+  if (cap === Infinity) return Math.max(0.2, 1 - e.price / 60);
+  if (e.price <= cap) return 1 - (e.price / cap) * 0.35;
+  return Math.max(0, 0.5 - (e.price - cap) / 40);
+}
+
+function circFit(e) {
+  const want = state.filters.circumstances;
+  if (!want.length) return 1;
+  return want.filter((c) => has(e, c)).length / want.length;
+}
+
+/* A weighted blend, so "close to what you asked for" beats "exactly it,
+   but you cannot get there". */
+function matchPct(e) {
+  const picked = state.filters.interests.length > 0;
+  const parts = picked
+    ? [[46, interestFit(e)], [16, timeFit(e)], [14, travelFit(e)], [12, moneyFit(e)], [12, circFit(e)]]
+    : [[28, timeFit(e)], [26, travelFit(e)], [24, moneyFit(e)], [22, circFit(e)]];
+  const total = parts.reduce((a, [w]) => a + w, 0);
+  const value = parts.reduce((a, [w, v]) => a + w * v, 0) / total;
+  return clamp(Math.round(value * 100), 4, 99);
+}
+
+/* ---- words ----------------------------------------------------------- */
+
+const modeWord = (m) =>
+  m === "walk" ? "on foot" : m === "transit" ? "on the bus" : m === "bike" ? "by bike" : "by car";
+
+const costLine = (e) =>
+  e.price === 0 ? "Free" : has(e, "student-price") ? `$${e.price} student` : `$${e.price}`;
+
+function fmtDuration(min) {
+  const h = Math.floor(min / 60), m = min % 60;
+  if (!h) return `${m} min`;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
 function perks(e) {
   const bits = [];
   if (e.price === 0) bits.push("costs nothing");
@@ -109,37 +171,107 @@ function perks(e) {
   return s.charAt(0).toUpperCase() + s.slice(1) + ".";
 }
 
-const modeWord = (m) =>
-  m === "walk" ? "on foot" : m === "transit" ? "on the bus" : m === "bike" ? "by bike" : "by car";
+/* Ordered so the most explanatory reason wins, not the first true one. */
+function why(e) {
+  if (isMatch(e)) return "fits";
+  if (state.filters.scope === "campus" && e.scope !== "campus") return "off campus";
+  if (e.price > budgetMax(state.filters.budget)) return "over budget";
+  if (!e.passes) return "ruled out";
+  if (!e.reachable) return "too far";
+  if (!e.inWindow) return "wrong time";
+  return "ruled out";
+}
 
-/* Ranked so an undecided person can take the first one and be fine. */
 function rank(e) {
-  return e.matchScore
-    + (state.filters.interests.some((t) => e.tags.includes(t)) ? 0.25 : 0)
-    + (e.price === 0 ? 0.15 : 0)
-    + (has(e, "free-food") ? 0.1 : 0)
-    + (has(e, "drop-in") ? 0.08 : 0)
-    + (has(e, "beginner-welcome") && has(e, "solo-friendly") ? 0.1 : 0)
-    - e.travelMinutes * 0.008;
+  return matchPct(e) / 100
+    + (e.price === 0 ? 0.12 : 0)
+    + (has(e, "free-food") ? 0.08 : 0)
+    + (has(e, "drop-in") ? 0.05 : 0)
+    - e.travelMinutes * 0.004;
+}
+
+/* ---- generated artwork ------------------------------------------------
+   One deterministic cover per event, built from the same arcs and dots
+   the chart uses. No network, so it cannot fail on a conference wifi. */
+
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const artCache = new Map();
+
+function hash(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return Math.abs(h);
+}
+
+function artFor(e) {
+  if (artCache.has(e.id)) return artCache.get(e.id);
+  const pal = (ART_PALETTES[e.tags[0]] || ART_PALETTES.social).map((n) => cssVar(`--${n}`));
+  const n = hash(e.id);
+  const W = 300, H = 190;
+  let shapes = "";
+
+  switch (n % 4) {
+    case 0:
+      for (let i = 3; i >= 1; i--) {
+        shapes += `<circle cx="46" cy="${H - 14}" r="${i * 56 + 12}" fill="none" stroke="${pal[i % 2 + 1]}" stroke-width="${9 + i * 5}"/>`;
+      }
+      break;
+    case 1:
+      shapes += `<circle cx="${210 + (n % 30)}" cy="${64 + (n % 20)}" r="72" fill="${pal[1]}"/>`;
+      shapes += `<rect x="0" y="${H - 54}" width="${W}" height="17" fill="${pal[2]}"/>`;
+      shapes += `<rect x="0" y="${H - 28}" width="${W * 0.62}" height="17" fill="${pal[1]}"/>`;
+      break;
+    case 2:
+      for (let i = 0; i < 5; i++) {
+        const x = -70 + i * 76;
+        shapes += `<polygon points="${x},${H} ${x + 40},${H} ${x + 40 + 70},0 ${x + 70},0" fill="${pal[i % 2 + 1]}" opacity="${i % 2 ? 1 : 0.88}"/>`;
+      }
+      break;
+    default:
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 6; c++) {
+          shapes += `<circle cx="${26 + c * 50}" cy="${28 + r * 45}" r="7" fill="${pal[2]}"/>`;
+        }
+      }
+      shapes += `<circle cx="${96 + (n % 4) * 50}" cy="${73 + (n % 2) * 45}" r="40" fill="${pal[1]}"/>`;
+  }
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice">` +
+    `<rect width="${W}" height="${H}" fill="${pal[0]}"/>${shapes}</svg>`;
+  const uri = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  artCache.set(e.id, uri);
+  return uri;
 }
 
 /* ---- elements -------------------------------------------------------- */
 
 const el = {
-  standfirst: document.getElementById("standfirst"),
-  editPrefs: document.getElementById("edit-prefs"),
-  setup: document.getElementById("setup"),
-  setupForm: document.getElementById("setup-form"),
+  wizard: document.getElementById("wizard"),
+  stepCount: document.getElementById("step-count"),
+  stepQ: document.getElementById("step-q"),
+  stepHint: document.getElementById("step-hint"),
+  stepLiveN: document.getElementById("step-live-n"),
+  stepLiveT: document.getElementById("step-live-t"),
+  stepDots: document.getElementById("step-dots"),
+  stepBody: document.getElementById("step-body"),
+  stepBack: document.getElementById("step-back"),
+  stepNext: document.getElementById("step-next"),
+  stepSkip: document.getElementById("step-skip"),
+
   results: document.getElementById("results"),
-  views: document.getElementById("views"),
+  standfirst: document.getElementById("standfirst"),
   spans: document.getElementById("spans"),
-  pick: document.getElementById("pick"),
+  legend: document.getElementById("legend"),
   wrap: document.getElementById("canvas-wrap"),
   svg: document.getElementById("radial"),
   tip: document.getElementById("tip"),
-  list: document.getElementById("list"),
+  cardsH: document.getElementById("cards-h"),
+  cardsSub: document.getElementById("cards-sub"),
+  cards: document.getElementById("cards"),
   empty: document.getElementById("empty"),
-  legend: document.getElementById("legend"),
   rail: document.getElementById("rail")
 };
 
@@ -156,9 +288,8 @@ const radial = createRadial(el.svg, {
 
 let revealing = false;
 let revealTimer = null;
-let rail = null;
 
-/* ---- setup screen ---------------------------------------------------- */
+/* ---- the questions --------------------------------------------------- */
 
 const toTimeValue = (h) => {
   const hh = Math.floor(h), mm = Math.round((h - hh) * 60);
@@ -170,69 +301,89 @@ const fromTimeValue = (v) => {
   return Number.isFinite(hh) ? hh + (mm || 0) / 60 : null;
 };
 
-function mountSetup() {
-  const f = state.filters;
-  el.setupForm.innerHTML = `
-    <fieldset class="ask">
-      <legend class="ask-q">Where are you starting from?</legend>
-      <p class="ask-hint">Everything is measured from here, so it is worth getting right.</p>
-      <p class="ask-origin" id="setup-origin"></p>
+const STEPS = [
+  {
+    id: "place",
+    q: "Where are you starting from?",
+    hint: "Every travel time on the next screens is measured from here.",
+    body: () => `
+      <p class="ask-origin" id="w-origin"></p>
       <div class="find">
-        <input type="search" id="setup-place" placeholder="Street and city" aria-label="Search a place">
-        <button type="button" class="btn" id="setup-find">Find</button>
+        <input type="search" id="w-place" placeholder="Street and city" aria-label="Search a place">
+        <button type="button" class="btn" id="w-find">Find</button>
       </div>
-      <button type="button" class="btn btn-wide" id="setup-geo">Use my location</button>
-      <p class="ask-note" id="setup-geo-note"></p>
-    </fieldset>
-
-    <fieldset class="ask">
-      <legend class="ask-q">What are you into?</legend>
-      <p class="ask-hint">Pick a few, or none if you want to see everything.</p>
-      <div class="chips">${INTERESTS.map((i) => chipHTML("tag", i.id, i.label)).join("")}</div>
-    </fieldset>
-
-    <fieldset class="ask">
-      <legend class="ask-q">What can you spend?</legend>
-      <p class="ask-hint">Most of what's on tonight is free.</p>
-      <div class="chips" id="setup-budget">
-        ${BUDGETS.map((b) => chipHTML("budget", b.id, b.label, b.id === f.budget)).join("")}
-      </div>
-    </fieldset>
-
-    <fieldset class="ask">
-      <legend class="ask-q">When are you free?</legend>
-      <p class="ask-hint">The gap between finishing work and wanting to sleep.</p>
+      <button type="button" class="btn btn-wide" id="w-geo">Use my location</button>
+      <p class="ask-note" id="w-geo-note"></p>`
+  },
+  {
+    id: "interests",
+    q: "What are you into?",
+    hint: "Pick a few. Things close to what you pick still show up, scored lower.",
+    body: () => `<div class="chips chips-big">${INTERESTS.map((i) => chipHTML("tag", i.id, i.label)).join("")}</div>`
+  },
+  {
+    id: "budget",
+    q: "What can you spend tonight?",
+    hint: "Most of what's on is free. This is the one that rules out the most.",
+    body: () => `<div class="chips chips-big">${BUDGETS.map((b) => chipHTML("budget", b.id, b.label)).join("")}</div>`
+  },
+  {
+    id: "time",
+    q: "When are you free?",
+    hint: "The gap between finishing work and wanting to sleep.",
+    body: () => `
       <div class="times">
-        <label class="time"><span>From</span><input type="time" id="setup-from" value="${toTimeValue(f.windowStart)}"></label>
-        <label class="time"><span>Until</span><input type="time" id="setup-to" value="${toTimeValue(f.windowEnd)}"></label>
-      </div>
-    </fieldset>
+        <label class="time"><span>From</span><input type="time" id="w-from" value="${toTimeValue(state.filters.windowStart)}"></label>
+        <label class="time"><span>Until</span><input type="time" id="w-to" value="${toTimeValue(state.filters.windowEnd)}"></label>
+      </div>`
+  },
+  {
+    id: "scope",
+    q: "How far will you go?",
+    hint: "This sets the travel limit. You can stretch it on the results.",
+    body: () => `<div class="chips chips-big">${SCOPES.map((s) => chipHTML("scope", s.id, s.label)).join("")}</div>`
+  },
+  {
+    id: "needs",
+    q: "Anything we should know?",
+    hint: "Only the things that would stop you turning up.",
+    body: () => `<div class="chips chips-big">${CIRCUMSTANCES.map((c) => chipHTML("circ", c.id, c.label)).join("")}</div>`
+  }
+];
 
-    <fieldset class="ask">
-      <legend class="ask-q">How far will you go?</legend>
-      <p class="ask-hint">This sets the travel limit. You can stretch it later.</p>
-      <div class="chips" id="setup-scope">
-        ${SCOPES.map((s) => chipHTML("scope", s.id, s.label, s.id === f.scope)).join("")}
-      </div>
-    </fieldset>
+function chipHTML(kind, value, label) {
+  return `<button type="button" class="chip" data-kind="${kind}" data-value="${value}" aria-pressed="false">
+    <span>${esc(label)}</span><span class="chip-n"></span>
+  </button>`;
+}
 
-    <fieldset class="ask">
-      <legend class="ask-q">Anything we should know?</legend>
-      <p class="ask-hint">Only what would stop you turning up.</p>
-      <div class="chips">${CIRCUMSTANCES.map((c) => chipHTML("circ", c.id, c.label)).join("")}</div>
-    </fieldset>
+function mountWizard() {
+  el.stepDots.innerHTML = STEPS
+    .map((s, i) => `<button type="button" class="step-dot" data-step="${i}" title="${esc(s.q)}"><span class="sr">${esc(s.q)}</span></button>`)
+    .join("");
 
-    <div class="ask ask-go">
-      <button type="submit" class="btn btn-go">Show me what's on</button>
-      <p class="ask-note" id="setup-count"></p>
-    </div>`;
-
-  el.setupForm.addEventListener("submit", (ev) => {
-    ev.preventDefault();
-    enterResults();
+  el.stepDots.addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-step]");
+    if (!b) return;
+    state.step = Number(b.dataset.step);
+    renderStep();
   });
 
-  el.setupForm.addEventListener("click", (ev) => {
+  el.stepBack.addEventListener("click", () => {
+    if (state.step === 0) return;
+    state.step -= 1;
+    renderStep();
+  });
+
+  el.stepNext.addEventListener("click", () => {
+    if (state.step >= STEPS.length - 1) return enterResults();
+    state.step += 1;
+    renderStep();
+  });
+
+  el.stepSkip.addEventListener("click", enterResults);
+
+  el.stepBody.addEventListener("click", (ev) => {
     const chip = ev.target.closest(".chip");
     if (!chip) return;
     const { kind, value } = chip.dataset;
@@ -240,40 +391,60 @@ function mountSetup() {
     else if (kind === "scope") setScope(value);
     else if (kind === "tag") state.filters.interests = toggled(state.filters.interests, value);
     else if (kind === "circ") state.filters.circumstances = toggled(state.filters.circumstances, value);
-    render();
+    updateStep();
   });
-
-  const from = el.setupForm.querySelector("#setup-from");
-  const to = el.setupForm.querySelector("#setup-to");
-  from.addEventListener("change", () => {
-    const v = fromTimeValue(from.value);
-    if (v == null) return;
-    state.filters.windowStart = Math.min(v, state.filters.windowEnd - 0.25);
-    fitSpan();
-    render();
-  });
-  to.addEventListener("change", () => {
-    const v = fromTimeValue(to.value);
-    if (v == null) return;
-    state.filters.windowEnd = Math.max(v, state.filters.windowStart + 0.25);
-    fitSpan();
-    render();
-  });
-
-  el.setupForm.querySelector("#setup-find")
-    .addEventListener("click", () => findPlace(el.setupForm.querySelector("#setup-place").value));
-  el.setupForm.querySelector("#setup-place")
-    .addEventListener("keydown", (ev) => {
-      if (ev.key !== "Enter") return;
-      ev.preventDefault();
-      findPlace(ev.target.value);
-    });
-  el.setupForm.querySelector("#setup-geo").addEventListener("click", useMyLocation);
 }
 
-function updateSetup() {
+function renderStep() {
+  const s = STEPS[state.step];
+  el.stepCount.textContent = `Question ${state.step + 1} of ${STEPS.length}`;
+  el.stepQ.textContent = s.q;
+  el.stepHint.textContent = s.hint;
+  el.stepBody.innerHTML = s.body();
+  el.stepBack.disabled = state.step === 0;
+  el.stepNext.textContent = state.step === STEPS.length - 1 ? "Show me what's on" : "Next";
+  el.stepSkip.hidden = state.step === STEPS.length - 1;
+  wireStep(s);
+  updateStep();
+  const first = el.stepBody.querySelector("button, input");
+  if (first) first.focus({ preventScroll: true });
+}
+
+function wireStep(s) {
+  if (s.id === "place") {
+    const go = () => findPlace(el.stepBody.querySelector("#w-place").value);
+    el.stepBody.querySelector("#w-find").addEventListener("click", go);
+    el.stepBody.querySelector("#w-place").addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter") return;
+      ev.preventDefault();
+      go();
+    });
+    el.stepBody.querySelector("#w-geo").addEventListener("click", useMyLocation);
+  }
+  if (s.id === "time") {
+    const from = el.stepBody.querySelector("#w-from");
+    const to = el.stepBody.querySelector("#w-to");
+    from.addEventListener("change", () => {
+      const v = fromTimeValue(from.value);
+      if (v == null) return;
+      state.filters.windowStart = Math.min(v, state.filters.windowEnd - 0.25);
+      fitSpan();
+      updateStep();
+    });
+    to.addEventListener("change", () => {
+      const v = fromTimeValue(to.value);
+      if (v == null) return;
+      state.filters.windowEnd = Math.max(v, state.filters.windowStart + 0.25);
+      fitSpan();
+      updateStep();
+    });
+  }
+}
+
+function updateStep() {
   const f = state.filters;
-  el.setupForm.querySelectorAll(".chip").forEach((chip) => {
+
+  el.stepBody.querySelectorAll(".chip").forEach((chip) => {
     const { kind, value } = chip.dataset;
     const on = kind === "budget" ? f.budget === value
       : kind === "scope" ? f.scope === value
@@ -284,19 +455,23 @@ function updateSetup() {
     chip.querySelector(".chip-n").textContent = chipCount(kind, value, on);
   });
 
-  el.setupForm.querySelector("#setup-origin").textContent = state.origin.label;
-  el.setupForm.querySelector("#setup-geo-note").textContent =
-    state.geo.busy ? "Looking that up." : (state.geo.note || "");
+  const origin = el.stepBody.querySelector("#w-origin");
+  if (origin) origin.textContent = state.origin.label;
+  const note = el.stepBody.querySelector("#w-geo-note");
+  if (note) note.textContent = state.geo.busy ? "Looking that up." : (state.geo.note || "");
 
   const n = countWith(f);
-  el.setupForm.querySelector("#setup-count").textContent = n === 0
-    ? "Nothing matches that yet. Loosen one answer."
-    : n === 1
-      ? `One of ${state.events.length} listings matches so far.`
-      : `${n} of ${state.events.length} listings match so far.`;
+  el.stepLiveN.textContent = n;
+  el.stepLiveT.textContent = n === 1
+    ? `thing matches so far, out of ${state.events.length}`
+    : `things match so far, out of ${state.events.length}`;
+
+  [...el.stepDots.children].forEach((d, i) => {
+    d.classList.toggle("is-on", i === state.step);
+    d.classList.toggle("is-done", i < state.step);
+  });
 }
 
-/* The scope answer sets the travel limit, then gets out of the way. */
 function setScope(id) {
   state.filters.scope = id;
   const s = SCOPES.find((x) => x.id === id);
@@ -312,7 +487,6 @@ function fitSpan() {
 
 function enterResults() {
   state.screen = "results";
-  state.pickIndex = 0;
   revealing = true;
   el.svg.classList.add("is-live", "is-reveal");
   render();
@@ -324,214 +498,11 @@ function enterResults() {
   }, 950);
 }
 
-function chipHTML(kind, value, label, on = false) {
-  return `<button type="button" class="chip${on ? " is-on" : ""}" data-kind="${kind}" data-value="${value}" aria-pressed="${on}">
-    <span>${esc(label)}</span><span class="chip-n"></span>
-  </button>`;
-}
-
-/* ---- toolbar --------------------------------------------------------- */
-
-function mountToolbar() {
-  el.views.innerHTML = [["radial", "Radial"], ["list", "List"]]
-    .map(([v, label]) => `<button type="button" class="seg" data-view="${v}" aria-pressed="false">${label}</button>`)
-    .join("");
-
-  el.spans.innerHTML = Object.values(SPANS)
-    .map((s) => `<button type="button" class="seg" data-span="${s.id}" aria-pressed="false">${s.label}</button>`)
-    .join("");
-
-  el.views.addEventListener("click", (ev) => {
-    const b = ev.target.closest("[data-view]");
-    if (!b) return;
-    state.view = b.dataset.view;
-    state.hoverId = null;
-    render();
-  });
-
-  el.spans.addEventListener("click", (ev) => {
-    const b = ev.target.closest("[data-span]");
-    if (!b) return;
-    state.spanId = b.dataset.span;
-    state.reflow = "stagger";
-    const s = SPANS[state.spanId];
-    state.filters.windowStart = clamp(state.filters.windowStart, s.start, s.end - 0.25);
-    state.filters.windowEnd = clamp(state.filters.windowEnd, state.filters.windowStart + 0.25, s.end);
-    render();
-  });
-
-  el.editPrefs.addEventListener("click", () => {
-    state.screen = "setup";
-    state.hoverId = null;
-    render();
-  });
-}
-
-/* ---- rail ------------------------------------------------------------ */
-
-function mountRail() {
-  el.rail.innerHTML = `
-    <div class="rail-block rail-head">
-      <p class="rail-count" id="count">0</p>
-      <p class="rail-note" id="count-note"></p>
-    </div>
-
-    <div class="rail-block">
-      <div class="rail-top">
-        <h2 class="rail-h">Starting from</h2>
-        <button type="button" class="link" id="origin-reset">Reset</button>
-      </div>
-      <p class="rail-fact" id="origin-label"></p>
-      <p class="rail-sub" id="origin-note"></p>
-      <div class="find">
-        <input type="search" id="place" placeholder="Street and city" aria-label="Search a place">
-        <button type="button" class="btn" id="place-go">Find</button>
-      </div>
-      <button type="button" class="btn btn-wide" id="geo">Use my location</button>
-    </div>
-
-    <div class="rail-block">
-      <h2 class="rail-h">What you'll spend</h2>
-      <div class="chips">${BUDGETS.map((b) => chipHTML("budget", b.id, b.label)).join("")}</div>
-    </div>
-
-    <div class="rail-block">
-      <h2 class="rail-h">Where to look</h2>
-      <div class="chips">${SCOPES.map((s) => chipHTML("scope", s.id, s.label)).join("")}</div>
-    </div>
-
-    <div class="rail-block">
-      <div class="rail-top">
-        <h2 class="rail-h">Free window</h2>
-        <span class="rail-val" id="window-val"></span>
-      </div>
-      <label class="slider">
-        <span class="slider-cap">Start</span>
-        <input type="range" id="win-start" step="0.25">
-      </label>
-      <label class="slider">
-        <span class="slider-cap">End</span>
-        <input type="range" id="win-end" step="0.25">
-      </label>
-    </div>
-
-    <div class="rail-block">
-      <div class="rail-top">
-        <h2 class="rail-h">Max travel</h2>
-        <span class="rail-val" id="travel-val"></span>
-      </div>
-      <label class="slider">
-        <span class="slider-cap">Minutes</span>
-        <input type="range" id="travel" min="5" max="60" step="1">
-      </label>
-    </div>
-
-    <div class="rail-block">
-      <h2 class="rail-h">Anything we should know</h2>
-      <div class="chips">${CIRCUMSTANCES.map((c) => chipHTML("circ", c.id, c.label)).join("")}</div>
-    </div>
-
-    <div class="rail-block">
-      <h2 class="rail-h">What you're into</h2>
-      <div class="chips">${INTERESTS.map((i) => chipHTML("tag", i.id, i.label)).join("")}</div>
-    </div>`;
-
-  const q = (s) => el.rail.querySelector(s);
-  rail = {
-    count: q("#count"), countNote: q("#count-note"),
-    originLabel: q("#origin-label"), originNote: q("#origin-note"),
-    place: q("#place"), placeGo: q("#place-go"), geo: q("#geo"), reset: q("#origin-reset"),
-    windowVal: q("#window-val"), travelVal: q("#travel-val"),
-    winStart: q("#win-start"), winEnd: q("#win-end"), travel: q("#travel"),
-    chips: [...el.rail.querySelectorAll(".chip")]
-  };
-
-  rail.winStart.addEventListener("input", () => {
-    state.filters.windowStart = Math.min(Number(rail.winStart.value), state.filters.windowEnd - 0.25);
-    state.reflow = "live";
-    render();
-  });
-
-  rail.winEnd.addEventListener("input", () => {
-    state.filters.windowEnd = Math.max(Number(rail.winEnd.value), state.filters.windowStart + 0.25);
-    state.reflow = "live";
-    render();
-  });
-
-  rail.travel.addEventListener("input", () => {
-    state.filters.maxTravel = Number(rail.travel.value);
-    state.reflow = "live";
-    render();
-  });
-
-  rail.chips.forEach((chip) => {
-    chip.addEventListener("click", () => {
-      const { kind, value } = chip.dataset;
-      if (kind === "budget") state.filters.budget = value;
-      else if (kind === "scope") setScope(value);
-      else if (kind === "circ") state.filters.circumstances = toggled(state.filters.circumstances, value);
-      else state.filters.interests = toggled(state.filters.interests, value);
-      state.reflow = "stagger";
-      state.pickIndex = 0;
-      render();
-    });
-  });
-
-  rail.placeGo.addEventListener("click", () => findPlace(rail.place.value));
-  rail.place.addEventListener("keydown", (ev) => {
-    if (ev.key !== "Enter") return;
-    ev.preventDefault();
-    findPlace(rail.place.value);
-  });
-  rail.geo.addEventListener("click", useMyLocation);
-  rail.reset.addEventListener("click", () => {
-    state.origin = { ...SEED_USER.origin };
-    state.travelSource = "feed";
-    state.geo = { busy: false, note: null };
-    state.reflow = "stagger";
-    render();
-  });
-}
-
-function updateRail(items) {
-  const f = state.filters;
-  const s = span();
-  const shown = items.filter(inSpan);
-
-  rail.count.textContent = shown.filter(isMatch).length;
-  rail.countNote.textContent = s.start === 0 && s.end === 24
-    ? `fit somewhere in the day, out of ${shown.length} listings.`
-    : `fit between ${fmtClock(s.start)} and ${fmtClock(s.end)}, out of ${shown.length} listings in those hours.`;
-
-  rail.originLabel.textContent = state.origin.label;
-  rail.originNote.textContent = state.geo.busy
-    ? "Looking that up."
-    : state.geo.note || (state.travelSource === "feed"
-      ? "Travel times as published."
-      : "Travel times estimated from distance.");
-
-  rail.windowVal.textContent = `${fmtClock(f.windowStart)} to ${fmtClock(f.windowEnd)}`;
-  rail.travelVal.textContent = `${f.maxTravel} min`;
-
-  [rail.winStart, rail.winEnd].forEach((input) => {
-    input.min = s.start;
-    input.max = s.end;
-  });
-
-  if (document.activeElement !== rail.winStart) rail.winStart.value = f.windowStart;
-  if (document.activeElement !== rail.winEnd) rail.winEnd.value = f.windowEnd;
-  if (document.activeElement !== rail.travel) rail.travel.value = f.maxTravel;
-
-  rail.chips.forEach((chip) => {
-    const { kind, value } = chip.dataset;
-    const on = kind === "budget" ? f.budget === value
-      : kind === "scope" ? f.scope === value
-        : kind === "circ" ? f.circumstances.includes(value)
-          : f.interests.includes(value);
-    chip.setAttribute("aria-pressed", String(on));
-    chip.classList.toggle("is-on", on);
-    chip.querySelector(".chip-n").textContent = chipCount(kind, value, on);
-  });
+function editAnswers(step = 0) {
+  state.screen = "wizard";
+  state.step = step;
+  state.hoverId = null;
+  render();
 }
 
 /* ---- location -------------------------------------------------------- */
@@ -550,7 +521,7 @@ async function findPlace(query) {
       busy: false,
       note: err.message === "no match"
         ? "No place by that name. Try a street and city."
-        : "The place lookup is not answering. Try a different place, or carry on with the published times."
+        : "The place lookup is not answering. Try another place, or carry on with the published times."
     };
   }
   state.reflow = "stagger";
@@ -591,73 +562,269 @@ function useMyLocation() {
   );
 }
 
-/* ---- best pick ------------------------------------------------------- */
+/* ---- results --------------------------------------------------------- */
 
-function renderPick(matches) {
-  if (!matches.length) {
-    el.pick.hidden = true;
-    return;
-  }
-  const ranked = [...matches].sort((a, b) => rank(b) - rank(a));
-  const e = ranked[state.pickIndex % ranked.length];
+function mountResults() {
+  el.spans.innerHTML = Object.values(SPANS)
+    .map((s) => `<button type="button" class="seg" data-span="${s.id}" aria-pressed="false">${s.label}</button>`)
+    .join("");
 
-  el.pick.hidden = false;
-  el.pick.innerHTML = `
-    <div class="pick-main">
-      <p class="pick-eyebrow">If you only do one thing</p>
-      <h2 class="pick-title">${esc(e.title)}</h2>
-      <p class="pick-where">${esc(e.venue)}, ${fmtClock(e.hour)}</p>
-      <p class="pick-why">${esc(perks(e))}</p>
-    </div>
-    <dl class="pick-facts">
-      <div><dt>Costs</dt><dd>${costLine(e)}</dd></div>
-      <div><dt>Gone for</dt><dd>${fmtDuration(e.totalMinutes)}</dd></div>
-      <div><dt>Back by</dt><dd>${fmtClock(e.backBy)}</dd></div>
-    </dl>
-    <div class="pick-actions">
-      <button type="button" class="btn" id="pick-open">See it on the chart</button>
-      ${ranked.length > 1 ? `<button type="button" class="link" id="pick-next">Something else</button>` : ""}
-    </div>`;
-
-  el.pick.querySelector("#pick-open").addEventListener("click", () => {
-    state.view = "radial";
-    state.selectedId = e.id;
-    state.hoverId = e.id;
+  el.spans.addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-span]");
+    if (!b) return;
+    state.spanId = b.dataset.span;
+    state.reflow = "stagger";
+    const s = SPANS[state.spanId];
+    state.filters.windowStart = clamp(state.filters.windowStart, s.start, s.end - 0.25);
+    state.filters.windowEnd = clamp(state.filters.windowEnd, state.filters.windowStart + 0.25, s.end);
     render();
   });
-  const next = el.pick.querySelector("#pick-next");
-  if (next) next.addEventListener("click", () => {
-    state.pickIndex = (state.pickIndex + 1) % ranked.length;
+
+  el.legend.innerHTML = `
+    <span class="key"><svg class="key-dot" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" class="is-match"></circle></svg>fits</span>
+    <span class="key"><svg class="key-dot" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5" class="is-late"></circle></svg>wrong time</span>
+    <span class="key"><svg class="key-dot" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" class="is-out"></circle></svg>ruled out</span>`;
+
+  el.cards.addEventListener("click", (ev) => {
+    const more = ev.target.closest("#show-ruled");
+    if (more) {
+      state.showRuled = !state.showRuled;
+      render();
+      return;
+    }
+    const card = ev.target.closest(".card");
+    if (!card) return;
+    state.selectedId = state.selectedId === card.dataset.id ? null : card.dataset.id;
+    render();
+  });
+
+  el.cards.addEventListener("mouseover", (ev) => {
+    const card = ev.target.closest(".card");
+    if (card) state.hoverId = card.dataset.id;
+  });
+}
+
+function mountRail() {
+  el.rail.innerHTML = `
+    <div class="rail-head">
+      <p class="rail-count" id="count">0</p>
+      <p class="rail-note" id="count-note"></p>
+    </div>
+
+    <div class="answers">
+      <div class="answers-top">
+        <h2 class="answers-h">Your answers</h2>
+        <button type="button" class="btn btn-ghost" id="edit-all">Edit</button>
+      </div>
+      <dl class="answers-list" id="answers-list"></dl>
+    </div>
+
+    <div class="tune">
+      <h2 class="rail-h">Fine tune</h2>
+      <div class="rail-top">
+        <span class="rail-cap">Free window</span>
+        <span class="rail-val" id="window-val"></span>
+      </div>
+      <label class="slider">
+        <span class="slider-cap">Start</span>
+        <input type="range" id="win-start" step="0.25">
+      </label>
+      <label class="slider">
+        <span class="slider-cap">End</span>
+        <input type="range" id="win-end" step="0.25">
+      </label>
+      <div class="rail-top">
+        <span class="rail-cap">Max travel</span>
+        <span class="rail-val" id="travel-val"></span>
+      </div>
+      <label class="slider">
+        <span class="slider-cap">Minutes</span>
+        <input type="range" id="travel" min="5" max="60" step="1">
+      </label>
+    </div>`;
+
+  const q = (s) => el.rail.querySelector(s);
+  rail = {
+    count: q("#count"), countNote: q("#count-note"), list: q("#answers-list"),
+    windowVal: q("#window-val"), travelVal: q("#travel-val"),
+    winStart: q("#win-start"), winEnd: q("#win-end"), travel: q("#travel")
+  };
+
+  q("#edit-all").addEventListener("click", () => editAnswers(0));
+
+  rail.list.addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-goto]");
+    if (b) editAnswers(Number(b.dataset.goto));
+  });
+
+  rail.winStart.addEventListener("input", () => {
+    state.filters.windowStart = Math.min(Number(rail.winStart.value), state.filters.windowEnd - 0.25);
+    state.reflow = "live";
+    render();
+  });
+  rail.winEnd.addEventListener("input", () => {
+    state.filters.windowEnd = Math.max(Number(rail.winEnd.value), state.filters.windowStart + 0.25);
+    state.reflow = "live";
+    render();
+  });
+  rail.travel.addEventListener("input", () => {
+    state.filters.maxTravel = Number(rail.travel.value);
+    state.reflow = "live";
     render();
   });
 }
 
-function fmtDuration(min) {
-  const h = Math.floor(min / 60), m = min % 60;
-  if (!h) return `${m} min`;
-  return m ? `${h}h ${m}m` : `${h}h`;
+let rail = null;
+
+function updateRail(items) {
+  const f = state.filters;
+  const s = span();
+  const shown = items.filter(inSpan);
+
+  rail.count.textContent = shown.filter(isMatch).length;
+  rail.countNote.textContent = s.start === 0 && s.end === 24
+    ? `fit somewhere in the day, out of ${shown.length}.`
+    : `fit between ${fmtClock(s.start)} and ${fmtClock(s.end)}, out of ${shown.length} on then.`;
+
+  const intoLabels = f.interests.map((i) => labelOf(INTERESTS, i));
+  const needLabels = f.circumstances.map((c) => labelOf(CIRCUMSTANCES, c));
+
+  rail.list.innerHTML = [
+    ["From", esc(state.origin.label), 0],
+    ["Into", intoLabels.length ? esc(intoLabels.join(", ")) : "anything", 1],
+    ["Spend", esc(labelOf(BUDGETS, f.budget)), 2],
+    ["Free", `${fmtClock(f.windowStart)} to ${fmtClock(f.windowEnd)}`, 3],
+    ["Range", esc(labelOf(SCOPES, f.scope)), 4],
+    ["Needs", needLabels.length ? esc(needLabels.join(", ")) : "nothing in particular", 5]
+  ].map(([k, v, step]) => `<div class="answer">
+      <dt>${k}</dt>
+      <dd>${v}</dd>
+      <button type="button" class="link link-deep" data-goto="${step}">change</button>
+    </div>`).join("");
+
+  rail.windowVal.textContent = `${fmtClock(f.windowStart)} to ${fmtClock(f.windowEnd)}`;
+  rail.travelVal.textContent = `${f.maxTravel} min`;
+
+  [rail.winStart, rail.winEnd].forEach((input) => {
+    input.min = s.start;
+    input.max = s.end;
+  });
+  if (document.activeElement !== rail.winStart) rail.winStart.value = f.windowStart;
+  if (document.activeElement !== rail.winEnd) rail.winEnd.value = f.windowEnd;
+  if (document.activeElement !== rail.travel) rail.travel.value = f.maxTravel;
+}
+
+/* ---- cards ----------------------------------------------------------- */
+
+function renderCards(shown) {
+  const matches = shown.filter(isMatch)
+    .sort((a, b) => matchPct(b) - matchPct(a) || rank(b) - rank(a));
+  const ruled = shown.filter((e) => !isMatch(e)).sort((a, b) => a.hour - b.hour);
+
+  el.cardsH.textContent = matches.length
+    ? (matches.length === 1 ? "The one thing that fits" : `${matches.length} things that fit`)
+    : "Nothing fits yet";
+  el.cardsSub.textContent = matches.length
+    ? "Best first. Everything here is inside your window, your budget and your travel limit."
+    : "Loosen one answer and they come back.";
+
+  const cards = matches.map((e, i) => cardHTML(e, i === 0)).join("");
+  const more = ruled.length
+    ? `<button type="button" class="show-more" id="show-ruled">
+        ${state.showRuled ? "Hide" : "Show"} the ${ruled.length} we ruled out
+       </button>`
+    : "";
+  const rest = state.showRuled ? ruled.map((e) => cardHTML(e, false)).join("") : "";
+
+  el.cards.innerHTML = cards + (more ? `<div class="cards-more">${more}</div>` : "") + rest;
+}
+
+function cardHTML(e, lead) {
+  const pct = matchPct(e);
+  const out = !isMatch(e);
+  return `<article class="card${lead ? " is-lead" : ""}${out ? " is-out" : ""}${e.id === state.selectedId ? " is-sel" : ""}"
+    data-id="${e.id}" tabindex="0" role="button" aria-label="${esc(e.title)}, ${pct} percent match">
+    <div class="card-art">
+      <img src="${artFor(e)}" alt="" loading="lazy">
+      <span class="pct">${pct}<span class="pct-u">%</span></span>
+      ${out ? `<span class="card-flag">${why(e)}</span>` : ""}
+    </div>
+    <div class="card-body">
+      <p class="card-when"><strong>${fmtClock(e.hour)}</strong> <span>to ${fmtClock(e.endHour)}</span></p>
+      <h3 class="card-title">${esc(e.title)}</h3>
+      <p class="card-venue">${esc(e.venue)}</p>
+      <p class="card-desc">${esc(e.description || "")}</p>
+      <dl class="card-facts">
+        <div><dt>Costs</dt><dd><strong>${costLine(e)}</strong></dd></div>
+        <div><dt>Getting there</dt><dd><strong>${e.travelMinutes} min</strong> ${modeWord(e.travelMode)}</dd></div>
+        <div><dt>Back by</dt><dd><strong>${fmtClock(e.backBy)}</strong></dd></div>
+      </dl>
+    </div>
+  </article>`;
+}
+
+/* ---- hover text ------------------------------------------------------ */
+
+function renderTip() {
+  if (state.screen === "results" && state.hoverId) {
+    const e = decorate(state.events, state.filters).find((x) => x.id === state.hoverId);
+    const dot = e && radial.dots.get(e.id);
+    if (e && dot && stateOf(e, span()) !== "off") {
+      showTip(e, dot);
+      return;
+    }
+  }
+  el.tip.hidden = true;
+}
+
+function showTip(e, dot) {
+  const pct = matchPct(e);
+  el.tip.innerHTML = `
+    <img class="tip-art" src="${artFor(e)}" alt="">
+    <div class="tip-body">
+      <div class="tip-top">
+        <span class="tip-title">${esc(e.title)}</span>
+        <span class="pct pct-flat">${pct}<span class="pct-u">%</span></span>
+      </div>
+      <p class="tip-venue">${esc(e.venue)}</p>
+      <p class="tip-desc">${esc(e.description || "")}</p>
+      <dl class="tip-grid">
+        <dt>Time</dt><dd><strong>${fmtClock(e.hour)}</strong> to <strong>${fmtClock(e.endHour)}</strong></dd>
+        <dt>Getting there</dt><dd><strong>${e.travelMinutes} min</strong> ${modeWord(e.travelMode)}</dd>
+        <dt>Costs</dt><dd><strong>${costLine(e)}</strong></dd>
+        <dt>Gone for</dt><dd><strong>${fmtDuration(e.totalMinutes)}</strong>, back by <strong>${fmtClock(e.backBy)}</strong></dd>
+      </dl>
+      <p class="tip-why">${why(e)}</p>
+    </div>`;
+  el.tip.hidden = false;
+
+  const wrap = el.wrap.getBoundingClientRect();
+  const r = dot.getBoundingClientRect();
+  const w = el.tip.offsetWidth;
+  const h = el.tip.offsetHeight;
+  const x = r.left + r.width / 2 - wrap.left;
+  const above = r.top - wrap.top - h - 12;
+  el.tip.style.left = `${clamp(x - w / 2, 4, Math.max(4, wrap.width - w - 4))}px`;
+  el.tip.style.top = `${above < 0 ? r.bottom - wrap.top + 12 : above}px`;
 }
 
 /* ---- render ---------------------------------------------------------- */
 
 function render() {
-  if (state.status === "loading") {
-    el.standfirst.textContent = "Loading what's on around Waterloo.";
-    return;
-  }
+  if (state.status === "loading") return;
   if (state.status === "error") {
+    el.wizard.hidden = true;
+    el.results.hidden = false;
     el.standfirst.textContent = `The listings did not load. ${state.error}. Reload to try again.`;
     return;
   }
 
-  const onSetup = state.screen === "setup";
-  el.setup.hidden = !onSetup;
-  el.results.hidden = onSetup;
-  el.editPrefs.hidden = onSetup;
+  const onWizard = state.screen === "wizard";
+  el.wizard.hidden = !onWizard;
+  el.results.hidden = onWizard;
 
-  if (onSetup) {
-    el.standfirst.textContent = "Answer these and we'll only show what you can actually get to.";
-    updateSetup();
+  if (onWizard) {
+    renderStep();
     return;
   }
 
@@ -671,17 +838,14 @@ function render() {
       ? "One thing you can get to, afford, and be back from."
       : `${matches.length} things you can get to, afford, and be back from.`;
 
-  [...el.views.children].forEach((b) => setPressed(b, b.dataset.view === state.view));
-  [...el.spans.children].forEach((b) => setPressed(b, b.dataset.span === state.spanId));
+  [...el.spans.children].forEach((b) => {
+    const on = b.dataset.span === state.spanId;
+    b.setAttribute("aria-pressed", String(on));
+    b.classList.toggle("is-on", on);
+  });
 
-  const isRadial = state.view === "radial";
-  el.wrap.hidden = !isRadial;
-  el.legend.hidden = !isRadial;
-  el.list.hidden = isRadial;
   el.empty.hidden = matches.length > 0;
   el.svg.classList.toggle("is-live-drag", state.reflow === "live" && !revealing);
-
-  renderPick(matches);
 
   radial.update({
     items,
@@ -693,97 +857,10 @@ function render() {
     delay: delayFor(items)
   });
 
-  if (!isRadial) renderList(shown);
+  renderCards(shown);
   renderTip();
   updateRail(items);
 }
-
-function setPressed(button, on) {
-  button.setAttribute("aria-pressed", String(on));
-  button.classList.toggle("is-on", on);
-}
-
-/* ---- list view ------------------------------------------------------- */
-
-function renderList(items) {
-  const head = `<div class="list-head" aria-hidden="true">
-    <span>Starts</span><span>What and where</span><span>Getting there</span>
-    <span>Costs</span><span>Back by</span><span>Fit</span>
-  </div>`;
-
-  el.list.innerHTML = head + items.map((e) => {
-    const s = stateOf(e, span());
-    const sel = e.id === state.selectedId ? " is-sel" : "";
-    return `<button type="button" class="row is-${s}${sel}" data-id="${e.id}">
-      <span class="row-time">${fmtClock(e.hour)}</span>
-      <span class="row-main">
-        <span class="row-title">${esc(e.title)}</span>
-        <span class="row-venue">${esc(e.venue)}</span>
-      </span>
-      <span class="row-travel">${e.travelMinutes} min ${modeWord(e.travelMode)}</span>
-      <span class="row-price">${costLine(e)}</span>
-      <span class="row-back">${fmtClock(e.backBy)}</span>
-      <span class="row-why">${why(e)}</span>
-    </button>`;
-  }).join("");
-
-  el.list.querySelectorAll(".row").forEach((row) => {
-    row.addEventListener("click", () => {
-      state.selectedId = state.selectedId === row.dataset.id ? null : row.dataset.id;
-      render();
-    });
-  });
-}
-
-/* Ordered so the most explanatory reason wins, not the first true one. */
-function why(e) {
-  if (isMatch(e)) return "fits";
-  if (state.filters.scope === "campus" && e.scope !== "campus") return "off campus";
-  if (e.price > budgetMax(state.filters.budget)) return "over budget";
-  if (!e.passes) return "ruled out";
-  if (!e.reachable) return "too far";
-  if (!e.inWindow) return "wrong time";
-  return "ruled out";
-}
-
-/* ---- hover text ------------------------------------------------------ */
-
-function renderTip() {
-  if (state.screen !== "setup" && state.hoverId) {
-    const e = decorate(state.events, state.filters).find((x) => x.id === state.hoverId);
-    const dot = e && radial.dots.get(e.id);
-    if (e && dot && state.view === "radial" && stateOf(e, span()) !== "off") {
-      showTip(e, dot);
-      return;
-    }
-  }
-  el.tip.hidden = true;
-}
-
-function showTip(e, dot) {
-  el.tip.innerHTML = `
-    <span class="tip-title">${esc(e.title)}</span>
-    <span class="tip-venue">${esc(e.venue)}</span>
-    <span class="tip-grid">
-      <span class="tip-k">Time</span><span class="tip-v">${fmtClock(e.hour)} to ${fmtClock(e.endHour)}</span>
-      <span class="tip-k">Getting there</span><span class="tip-v">${e.travelMinutes} min ${modeWord(e.travelMode)}</span>
-      <span class="tip-k">Costs</span><span class="tip-v">${costLine(e)}</span>
-      <span class="tip-k">Gone for</span><span class="tip-v">${fmtDuration(e.totalMinutes)}, back by ${fmtClock(e.backBy)}</span>
-    </span>
-    <span class="tip-why">${why(e)}</span>`;
-  el.tip.hidden = false;
-
-  const wrap = el.wrap.getBoundingClientRect();
-  const r = dot.getBoundingClientRect();
-  const w = el.tip.offsetWidth;
-  const h = el.tip.offsetHeight;
-  const x = r.left + r.width / 2 - wrap.left;
-  const above = r.top - wrap.top - h - 10;
-  el.tip.style.left = `${clamp(x - w / 2, 4, Math.max(4, wrap.width - w - 4))}px`;
-  el.tip.style.top = `${above < 0 ? r.bottom - wrap.top + 10 : above}px`;
-}
-
-/* ---- helpers --------------------------------------------------------- */
 
 /* Reveal orders by radius, reflow orders by index, drags do not stagger. */
 function delayFor(items) {
@@ -808,21 +885,13 @@ function esc(s) {
 
 /* ---- boot ------------------------------------------------------------ */
 
-render();
-
 loadEvents()
   .then((events) => {
     state.events = events;
     state.status = "ready";
-
-    mountSetup();
-    mountToolbar();
+    mountWizard();
+    mountResults();
     mountRail();
-    el.legend.innerHTML = `
-      <span class="key"><svg class="key-dot" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" class="is-match"></circle></svg>you can get to this</span>
-      <span class="key"><svg class="key-dot" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5" class="is-late"></circle></svg>reachable, wrong time</span>
-      <span class="key"><svg class="key-dot" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" class="is-out"></circle></svg>ruled out by your answers</span>`;
-
     render();
   })
   .catch((err) => {
