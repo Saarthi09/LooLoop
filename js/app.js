@@ -1,5 +1,5 @@
 import {
-  loadEvents, SEED_USER, estimateTravel, geocode, similarity,
+  loadEvents, SEED_USER, estimateTravel, geocode, similarity, fetchForecast, SAMPLE_FORECAST,
   INTERESTS, CIRCUMSTANCES, BUDGETS, SCOPES, ART_PALETTES, QUICK_PLACES
 } from "./data.js";
 import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js";
@@ -15,6 +15,11 @@ const state = {
   travelSource: "feed",      // feed | estimated
   geo: { busy: false, note: null },
   spanId: "evening",
+  nowAuto: true,             // the clock, or a time the user scrubbed to
+  nowManual: 19,
+  weather: null,             // { sample, hours } once fetched
+  weatherBusy: false,
+  forceRain: false,          // show the ranking against a wet evening
   selectedId: null,
   hoverId: null,
   showRuled: false,
@@ -37,6 +42,38 @@ const labelOf = (list, id) => (list.find((x) => x.id === id) || {}).label || id;
 const toggled = (list, v) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 const has = (e, c) => e.circumstances.includes(c);
 
+/* ---- the situation ---------------------------------------------------
+   Two things about the moment change what gets recommended: what time
+   it is, and what the weather is doing. Neither is a filter. They move
+   events up and down the ranking and decide what is still catchable. */
+
+function nowHour() {
+  if (!state.nowAuto) return state.nowManual;
+  const d = new Date();
+  return d.getHours() + d.getMinutes() / 60;
+}
+
+const forecast = () => (state.forceRain ? SAMPLE_FORECAST : state.weather);
+
+function weatherAt(h) {
+  const f = forecast();
+  if (!f) return null;
+  return f.hours[Math.floor(h) % 24] || null;
+}
+
+async function ensureWeather() {
+  if (state.weather || state.weatherBusy) return;
+  state.weatherBusy = true;
+  try {
+    state.weather = await fetchForecast(state.origin);
+  } catch (err) {
+    /* A demo on bad wifi still needs something to rank against. */
+    state.weather = SAMPLE_FORECAST;
+  }
+  state.weatherBusy = false;
+  render();
+}
+
 /* ---- derived --------------------------------------------------------- */
 
 const hourOf = (iso) => {
@@ -48,11 +85,25 @@ const travelFor = (e) =>
   state.travelSource === "feed" ? e.travelMinutes : (estimateTravel(state.origin, e) ?? e.travelMinutes);
 
 function decorate(events, f) {
+  const now = nowHour();
   return events.map((e) => {
     const h = hourOf(e.startsAt);
     const endHour = hourOf(e.endsAt);
     const travel = travelFor(e);
     const duration = Math.max(0, endHour - h) * 60;
+
+    /* When you would have to walk out of the door, and what is left of
+       it by the time you arrive. */
+    const leaveBy = h - travel / 60;
+    const arriveAt = Math.max(h, now + travel / 60);
+    const over = now >= endHour;
+    const missed = duration > 0 ? clamp((arriveAt - h) / (endHour - h), 0, 1) : 0;
+    const catchable = !over && arriveAt <= endHour - 0.25;
+
+    const userOk = f.circumstances.every((c) => e.circumstances.includes(c)) &&
+      e.price <= budgetMax(f.budget) &&
+      (f.scope !== "campus" || e.scope === "campus");
+
     return {
       ...e,
       hour: h,
@@ -61,11 +112,15 @@ function decorate(events, f) {
       durationMin: Math.round(duration),
       totalMinutes: Math.round(duration + travel * 2),
       backBy: (endHour + travel / 60) % 24,
+      leaveBy: (leaveBy + 24) % 24,
+      leaveInMin: Math.round((leaveBy - now) * 60),
+      over,
+      missed,
+      catchable,
+      userOk,
       inWindow: h >= f.windowStart && h <= f.windowEnd,
       reachable: travel <= f.maxTravel,
-      passes: f.circumstances.every((c) => e.circumstances.includes(c)) &&
-        e.price <= budgetMax(f.budget) &&
-        (f.scope !== "campus" || e.scope === "campus")
+      passes: userOk && catchable
     };
   }).sort((a, b) => a.hour - b.hour || a.travelMinutes - b.travelMinutes);
 }
@@ -126,6 +181,28 @@ function moneyFit(e) {
   return Math.max(0, 0.5 - (e.price - cap) / 40);
 }
 
+/* Already gone is worthless; about to start and just catchable is the
+   best thing we can offer someone deciding right now. */
+function timingFit(e) {
+  if (!e.catchable) return 0;
+  if (e.leaveInMin < 0) return Math.max(0, 0.6 - e.missed * 0.5);
+  if (e.leaveInMin <= 25) return 1;
+  if (e.leaveInMin <= 90) return 0.88;
+  return 0.72;
+}
+
+/* Rain moves outdoor things down and indoor things up, by how likely it
+   is at the hour the thing actually starts. */
+function weatherFit(e) {
+  const w = weatherAt(e.hour);
+  if (!w) return 0.55;
+  const rain = (w.rain ?? 0) / 100;
+  const cold = w.temp == null ? 0 : clamp((9 - w.temp) / 14, 0, 1);
+  if (e.setting === "indoor") return clamp(0.5 + rain * 0.45 + cold * 0.15, 0, 1);
+  const base = e.setting === "mixed" ? 0.78 : 1;
+  return clamp(base * (1 - rain * 0.85) - cold * 0.3, 0, 1);
+}
+
 function circFit(e) {
   const want = state.filters.circumstances;
   if (!want.length) return 1;
@@ -137,8 +214,10 @@ function circFit(e) {
 function matchPct(e) {
   const picked = state.filters.interests.length > 0;
   const parts = picked
-    ? [[46, interestFit(e)], [16, timeFit(e)], [14, travelFit(e)], [12, moneyFit(e)], [12, circFit(e)]]
-    : [[28, timeFit(e)], [26, travelFit(e)], [24, moneyFit(e)], [22, circFit(e)]];
+    ? [[36, interestFit(e)], [16, timingFit(e)], [14, weatherFit(e)],
+       [10, timeFit(e)], [10, travelFit(e)], [8, moneyFit(e)], [6, circFit(e)]]
+    : [[24, timingFit(e)], [22, weatherFit(e)], [18, timeFit(e)],
+       [16, travelFit(e)], [12, moneyFit(e)], [8, circFit(e)]];
   const total = parts.reduce((a, [w]) => a + w, 0);
   const value = parts.reduce((a, [w, v]) => a + w * v, 0) / total;
   return clamp(Math.round(value * 100), 4, 99);
@@ -174,6 +253,8 @@ function perks(e) {
 /* Ordered so the most explanatory reason wins, not the first true one. */
 function why(e) {
   if (isMatch(e)) return "fits";
+  if (e.over) return "already finished";
+  if (!e.catchable) return "you'd miss it";
   if (state.filters.scope === "campus" && e.scope !== "campus") return "off campus";
   if (e.price > budgetMax(state.filters.budget)) return "over budget";
   if (!e.passes) return "ruled out";
@@ -184,6 +265,7 @@ function why(e) {
 
 function rank(e) {
   return matchPct(e) / 100
+    + (e.leaveInMin >= 0 && e.leaveInMin <= 25 ? 0.1 : 0)
     + (e.price === 0 ? 0.12 : 0)
     + (has(e, "free-food") ? 0.08 : 0)
     + (has(e, "drop-in") ? 0.05 : 0)
@@ -910,6 +992,21 @@ function mountResults() {
 
 function mountRail() {
   el.rail.innerHTML = `
+    <div class="nowbox">
+      <div class="answers-top">
+        <h2 class="answers-h">Right now</h2>
+        <button type="button" class="link link-deep" id="now-reset">use the clock</button>
+      </div>
+      <p class="now-time" id="now-time"></p>
+      <label class="slider slider-deep">
+        <span class="slider-cap">Pretend</span>
+        <input type="range" id="now-range" min="6" max="23.75" step="0.25">
+      </label>
+      <p class="now-weather" id="now-weather"></p>
+      <p class="now-effect" id="now-effect"></p>
+      <button type="button" class="link link-deep" id="now-rain"></button>
+    </div>
+
     <div class="rail-head">
       <p class="rail-count" id="count">0</p>
       <p class="rail-note" id="count-note"></p>
@@ -949,12 +1046,34 @@ function mountRail() {
 
   const q = (s) => el.rail.querySelector(s);
   rail = {
+    nowTime: q("#now-time"), nowRange: q("#now-range"),
+    nowWeather: q("#now-weather"), nowEffect: q("#now-effect"),
+    nowReset: q("#now-reset"), nowRain: q("#now-rain"),
     count: q("#count"), countNote: q("#count-note"), list: q("#answers-list"),
     windowVal: q("#window-val"), travelVal: q("#travel-val"),
     winStart: q("#win-start"), winEnd: q("#win-end"), travel: q("#travel")
   };
 
   q("#edit-all").addEventListener("click", () => editAnswers(0));
+
+  rail.nowRange.addEventListener("input", () => {
+    state.nowAuto = false;
+    state.nowManual = Number(rail.nowRange.value);
+    state.reflow = "live";
+    render();
+  });
+
+  rail.nowReset.addEventListener("click", () => {
+    state.nowAuto = true;
+    state.reflow = "stagger";
+    render();
+  });
+
+  rail.nowRain.addEventListener("click", () => {
+    state.forceRain = !state.forceRain;
+    state.reflow = "stagger";
+    render();
+  });
 
   rail.list.addEventListener("click", (ev) => {
     const b = ev.target.closest("[data-goto]");
@@ -984,11 +1103,31 @@ function updateRail(items) {
   const f = state.filters;
   const s = span();
   const shown = items.filter(inSpan);
+  const now = nowHour();
+
+  rail.nowTime.textContent = state.nowAuto
+    ? `It's ${fmtClock(Math.round(now * 4) / 4)}`
+    : `Pretending it's ${fmtClock(state.nowManual)}`;
+  rail.nowReset.hidden = state.nowAuto;
+  if (document.activeElement !== rail.nowRange) rail.nowRange.value = now;
+
+  const mid = (f.windowStart + f.windowEnd) / 2;
+  const w = weatherAt(mid);
+  rail.nowWeather.textContent = !forecast()
+    ? "Checking the forecast."
+    : `${Math.round(w?.temp ?? 0)} degrees, ${w?.rain ?? 0}% chance of rain around ${fmtClock(Math.floor(mid))}` +
+      (forecast().sample ? ", from a sample forecast" : "");
+  rail.nowEffect.textContent = weatherEffect(w);
+  rail.nowRain.textContent = state.forceRain
+    ? "back to the real forecast"
+    : "see it with rain";
 
   rail.count.textContent = shown.filter(isMatch).length;
-  rail.countNote.textContent = s.start === 0 && s.end === 24
+  const gone = shown.filter((e) => e.over).length;
+  rail.countNote.textContent = (s.start === 0 && s.end === 24
     ? `fit somewhere in the day, out of ${shown.length}.`
-    : `fit between ${fmtClock(s.start)} and ${fmtClock(s.end)}, out of ${shown.length} on then.`;
+    : `fit between ${fmtClock(s.start)} and ${fmtClock(s.end)}, out of ${shown.length} on then.`) +
+    (gone ? ` ${gone} already finished.` : "");
 
   const intoLabels = f.interests.map((i) => labelOf(INTERESTS, i));
   const needLabels = f.circumstances.map((c) => labelOf(CIRCUMSTANCES, c));
@@ -1018,6 +1157,14 @@ function updateRail(items) {
   if (document.activeElement !== rail.travel) rail.travel.value = f.maxTravel;
 }
 
+function weatherEffect(w) {
+  if (!w) return "";
+  if ((w.rain ?? 0) >= 55) return "Wet out, so indoor things are ranked first.";
+  if ((w.rain ?? 0) >= 30) return "It might rain, so outdoor things are ranked lower.";
+  if (w.temp != null && w.temp < 9) return "Cold out, so outdoor things are ranked lower.";
+  return "Dry and mild, so outdoor things are ranked up.";
+}
+
 /* ---- cards ----------------------------------------------------------- */
 
 function renderCards(shown) {
@@ -1028,9 +1175,11 @@ function renderCards(shown) {
   el.cardsH.textContent = matches.length
     ? (matches.length === 1 ? "The one thing that fits" : `${matches.length} things that fit`)
     : "Nothing fits yet";
+  const w = weatherAt((state.filters.windowStart + state.filters.windowEnd) / 2);
   el.cardsSub.textContent = matches.length
-    ? "Best first. Everything here is inside your window, your budget and your travel limit."
-    : "Loosen one answer and they come back.";
+    ? `Ranked for ${fmtClock(Math.round(nowHour() * 4) / 4)} and a ${w?.rain ?? 0}% chance of rain. ` +
+      "Everything here is still catchable."
+    : "Loosen one answer, or move the clock, and they come back.";
 
   const cards = matches.map((e, i) => cardHTML(e, i === 0)).join("");
   const more = ruled.length
@@ -1043,6 +1192,24 @@ function renderCards(shown) {
   el.cards.innerHTML = cards + (more ? `<div class="cards-more">${more}</div>` : "") + rest;
 }
 
+function urgentFlag(e) {
+  if (e.leaveInMin < 0) return `<span class="card-flag is-now">started, walk in</span>`;
+  if (e.leaveInMin <= 25) return `<span class="card-flag is-now">leave in ${e.leaveInMin} min</span>`;
+  return "";
+}
+
+function weatherNote(e) {
+  const w = weatherAt(e.hour);
+  if (!w || e.setting === "indoor") return "";
+  if ((w.rain ?? 0) >= 40) {
+    return `<p class="card-note">Outdoors, and a ${w.rain}% chance of rain at ${fmtClock(Math.floor(e.hour))}.</p>`;
+  }
+  if (w.temp != null && w.temp < 9) {
+    return `<p class="card-note">Outdoors, and ${Math.round(w.temp)} degrees at ${fmtClock(Math.floor(e.hour))}.</p>`;
+  }
+  return "";
+}
+
 function cardHTML(e, lead) {
   const pct = matchPct(e);
   const out = !isMatch(e);
@@ -1051,16 +1218,18 @@ function cardHTML(e, lead) {
     <div class="card-art">
       <img src="${artFor(e)}" alt="" loading="lazy">
       <span class="pct">${pct}<span class="pct-u">%</span></span>
-      ${out ? `<span class="card-flag">${why(e)}</span>` : ""}
+      ${out ? `<span class="card-flag">${why(e)}</span>` : urgentFlag(e)}
     </div>
     <div class="card-body">
       <p class="card-when"><strong>${fmtClock(e.hour)}</strong> <span>to ${fmtClock(e.endHour)}</span></p>
       <h3 class="card-title">${esc(e.title)}</h3>
       <p class="card-venue">${esc(e.venue)}</p>
       <p class="card-desc">${esc(e.description || "")}</p>
+      ${weatherNote(e)}
       <dl class="card-facts">
         <div><dt>Costs</dt><dd><strong>${costLine(e)}</strong></dd></div>
         <div><dt>Getting there</dt><dd><strong>${e.travelMinutes} min</strong> ${modeWord(e.travelMode)}</dd></div>
+        <div><dt>Leave by</dt><dd><strong>${fmtClock(e.leaveBy)}</strong></dd></div>
         <div><dt>Back by</dt><dd><strong>${fmtClock(e.backBy)}</strong></dd></div>
       </dl>
     </div>
@@ -1096,8 +1265,9 @@ function showTip(e, dot) {
         <dt>Time</dt><dd><strong>${fmtClock(e.hour)}</strong> to <strong>${fmtClock(e.endHour)}</strong></dd>
         <dt>Getting there</dt><dd><strong>${e.travelMinutes} min</strong> ${modeWord(e.travelMode)}</dd>
         <dt>Costs</dt><dd><strong>${costLine(e)}</strong></dd>
-        <dt>Gone for</dt><dd><strong>${fmtDuration(e.totalMinutes)}</strong>, back by <strong>${fmtClock(e.backBy)}</strong></dd>
+        <dt>Leave by</dt><dd><strong>${fmtClock(e.leaveBy)}</strong>, back by <strong>${fmtClock(e.backBy)}</strong></dd>
       </dl>
+      ${weatherNote(e)}
       <p class="tip-why">${why(e)}</p>
     </div>`;
   el.tip.hidden = false;
@@ -1150,6 +1320,8 @@ function render() {
 
   el.empty.hidden = matches.length > 0;
   el.svg.classList.toggle("is-live-drag", state.reflow === "live" && !revealing);
+
+  ensureWeather();
 
   radial.update({
     items,
