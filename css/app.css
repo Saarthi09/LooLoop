@@ -20,8 +20,8 @@ body {
   align-items: baseline;
   gap: 18px;
   flex-wrap: wrap;
-  padding: 20px 28px 14px 28px;
-  border-bottom: 1px solid rgba(22, 25, 26, 0.14);
+  padding: 18px 28px 12px 28px;
+  border-bottom: 1px solid var(--hair);
 }
 
 .wordmark {
@@ -36,129 +36,347 @@ body {
 .standfirst {
   margin: 0;
   color: var(--ink-2);
-  max-width: 60ch;
+  max-width: 62ch;
 }
 
 /* ---- frame ----------------------------------------------------------- */
 
 .frame {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  grid-template-columns: minmax(0, 2fr) minmax(258px, 0.85fr);
   align-items: start;
-  gap: 0;
-  min-height: calc(100vh - 74px);
+  min-height: calc(100vh - 66px);
 }
 
 .stage {
-  padding: 20px 28px 40px 28px;
+  padding: 14px 20px 28px 4px;
   min-width: 0;
 }
 
 .rail {
-  padding: 20px 28px 40px 20px;
-  border-left: 1px solid rgba(22, 25, 26, 0.14);
+  padding: 20px 28px 40px 22px;
+  border-left: 1px solid var(--hair);
   align-self: stretch;
   min-width: 0;
 }
 
-/* ---- plain rows (commit 1) ------------------------------------------ */
+/* ---- canvas ---------------------------------------------------------- */
 
-.rows {
-  border-top: 1px solid rgba(22, 25, 26, 0.12);
+.radial {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: calc(100vh - 140px);
+  overflow: visible;
 }
 
-.row {
-  display: grid;
-  grid-template-columns: 62px minmax(0, 1fr) 98px 62px;
-  gap: 14px;
-  align-items: baseline;
-  padding: 9px 0;
-  border-bottom: 1px solid rgba(22, 25, 26, 0.12);
+.disc { fill: var(--paper-2); }
+
+.wedge { fill: var(--window); }
+
+.ring, .rim {
+  fill: none;
+  stroke: var(--ink-3);
+  stroke-width: 0.5;
 }
 
-.row.is-dim { color: var(--ink-2); }
+.rim { stroke-width: 1; }
 
-.row-time,
-.row-travel,
-.row-price {
+.baseline, .tick {
+  stroke: var(--ink-3);
+  stroke-width: 0.5;
+}
+
+.origin { fill: var(--ink); }
+
+.hour-label, .ring-label, .origin-label {
+  font-family: var(--font);
   font-variant-numeric: tabular-nums;
-  color: var(--ink-2);
+  fill: var(--ink-2);
 }
 
-.row.is-match .row-time { color: var(--signal); font-weight: 500; }
+.hour-label { font-size: 12px; }
+.ring-label { font-size: 11px; }
+.origin-label { font-size: 12px; }
 
-.row-main { min-width: 0; }
+/* ---- dots ------------------------------------------------------------ */
 
-.row-title {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.dot { cursor: pointer; }
+
+.dot.is-match { fill: var(--signal); }
+
+/* Spec says --ink-3 here; it reads at 2.3:1 and vanishes on a projector.
+   --ink-2 keeps the dot desaturated but visible. Revert this one line to
+   go back to the spec value. */
+.dot.is-late {
+  fill: none;
+  stroke: var(--ink-2);
+  stroke-width: 1;
 }
 
-.row-venue {
-  display: block;
+.dot.is-out {
+  fill: var(--ink-3);
+  opacity: 0.35;
+  cursor: default;
+}
+
+.dot.is-match:hover, .dot.is-late:hover {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+
+.dot:focus { outline: none; }
+
+.dot:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+/* ---- legend ---------------------------------------------------------- */
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 8px 0 0 26px;
   color: var(--ink-2);
   font-size: 13px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.row-price { text-align: right; }
+.key { display: inline-flex; align-items: center; gap: 6px; }
+
+.key-dot { width: 14px; height: 14px; overflow: visible; }
+
+.key-dot .is-match { fill: var(--signal); }
+.key-dot .is-late { fill: none; stroke: var(--ink-2); stroke-width: 1.4; }
+.key-dot .is-out { fill: var(--ink-3); opacity: 0.35; }
+
+.empty {
+  margin: 10px 0 0 26px;
+  max-width: 46ch;
+  color: var(--ink);
+}
 
 /* ---- rail ------------------------------------------------------------ */
 
-.rail-block { margin-bottom: 22px; }
+.rail-block { margin-bottom: 20px; }
+
+.rail-head { margin-bottom: 24px; }
+
+.rail-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
 
 .rail-h {
-  margin: 0 0 6px 0;
+  margin: 0;
   font-size: 13px;
   font-weight: 500;
   color: var(--ink-2);
 }
 
-.rail-fact {
-  margin: 0;
+.rail-val {
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
+  color: var(--ink);
 }
 
 .rail-count {
-  font-size: 34px;
+  margin: 0;
+  font-size: 46px;
   font-weight: 500;
   font-stretch: 118%;
   letter-spacing: -0.02em;
-  line-height: 1.1;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
   color: var(--signal);
 }
 
 .rail-note {
-  margin: 4px 0 0 0;
+  margin: 6px 0 0 0;
   color: var(--ink-2);
   font-size: 13px;
-  max-width: 34ch;
+  max-width: 30ch;
 }
 
-/* ---- states ---------------------------------------------------------- */
+/* ---- sliders --------------------------------------------------------- */
 
-.notice {
-  padding: 16px 0;
+.slider {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.slider-cap {
+  font-size: 12px;
   color: var(--ink-2);
-  max-width: 46ch;
+}
+
+.slider input[type="range"] {
+  width: 100%;
+  accent-color: var(--signal);
+  background: transparent;
+  margin: 0;
+}
+
+.slider input[type="range"]:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 3px;
+}
+
+/* ---- chips ----------------------------------------------------------- */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.chip:hover { border-color: var(--ink); }
+
+.chip.is-on {
+  background: var(--signal);
+  border-color: var(--signal);
+  color: var(--paper);
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+.chip-n {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.chip.is-on .chip-n { color: var(--paper-2); }
+
+/* ---- motion ---------------------------------------------------------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  .chip {
+    transition: background var(--t-fast) var(--ease),
+                border-color var(--t-fast) var(--ease),
+                color var(--t-fast) var(--ease);
+  }
+
+  .radial.is-live .dot {
+    transition:
+      cx var(--t) var(--ease),
+      cy var(--t) var(--ease),
+      r var(--t) var(--ease),
+      fill var(--t) var(--ease),
+      stroke var(--t-fast) var(--ease),
+      opacity var(--t) var(--ease);
+  }
+
+  .radial.is-live-drag .dot {
+    transition-duration: 0ms;
+    transition-delay: 0ms !important;
+  }
+
+  .radial.is-reveal .field { transform-origin: 350px 340px; }
+
+  .radial.is-reveal .ring,
+  .radial.is-reveal .rim {
+    animation: ring-in 380ms var(--ease) both;
+    transform-origin: 350px 340px;
+  }
+
+  .radial.is-reveal .ring:nth-of-type(2) { animation-delay: 70ms; }
+  .radial.is-reveal .ring:nth-of-type(3) { animation-delay: 140ms; }
+  .radial.is-reveal .rim { animation-delay: 210ms; }
+
+  .radial.is-reveal .disc { animation: fade-in 240ms var(--ease) both; }
+  .radial.is-reveal .wedge { animation: fade-in 260ms var(--ease) 340ms both; }
+  .radial.is-reveal .chrome { animation: fade-in 260ms var(--ease) 420ms both; }
+}
+
+@keyframes ring-in {
+  from { opacity: 0; transform: scale(0.82); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 /* ---- responsive ------------------------------------------------------ */
 
-@media (max-width: 760px) {
-  .frame { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 860px) {
+  .frame {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: auto;
+  }
+
+  .stage { padding: 10px 16px 16px 16px; }
+
+  .radial { max-height: none; }
+
+  .legend, .empty { margin-left: 0; }
+
   .rail {
     border-left: 0;
-    border-top: 1px solid rgba(22, 25, 26, 0.14);
-    padding: 18px 20px 32px 20px;
+    border-top: 1px solid var(--hair);
+    padding: 14px 16px 28px 16px;
+    display: flex;
+    gap: 22px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
   }
-  .stage { padding: 16px 20px 24px 20px; }
-  .topbar { padding: 16px 20px 12px 20px; }
-  .row { grid-template-columns: 56px minmax(0, 1fr) 60px; }
-  .row-price { display: none; }
+
+  .rail-block {
+    margin-bottom: 0;
+    flex: 0 0 auto;
+    max-width: 76vw;
+  }
+
+  .rail-head {
+    order: -1;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    max-width: none;
+  }
+
+  .rail-head .rail-count { font-size: 30px; }
+
+  .rail-head .rail-note {
+    margin: 0;
+    width: 16ch;
+  }
+
+  .slider { grid-template-columns: 46px 140px; }
+
+  .chips { flex-wrap: nowrap; }
+
+  .topbar { padding: 14px 16px 10px 16px; }
+
+  /* SVG text scales with the viewBox, so bump it back to a readable size. */
+  .hour-label { font-size: 20px; }
+  .ring-label { font-size: 17px; }
+  .origin-label { font-size: 19px; }
 }

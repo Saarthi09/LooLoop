@@ -7,6 +7,10 @@
   --signal:  #2440E0;
   --window:  #C8D4B8;
 
+  /* 1px hairlines, used in place of shadows */
+  --hair:    rgba(22, 25, 26, 0.14);
+  --hair-2:  rgba(22, 25, 26, 0.24);
+
   --r-sm: 3px;
   --r-lg: 14px;
 

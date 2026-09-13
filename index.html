@@ -17,8 +17,10 @@
   </header>
 
   <main class="frame">
-    <section class="stage" id="stage" aria-label="Events">
-      <div class="rows" id="rows"></div>
+    <section class="stage">
+      <svg class="radial" id="radial" role="group" aria-label="Tonight, arranged by start time and travel time"></svg>
+      <p class="empty" id="empty" hidden>Nothing fits that window. Try widening the time or the travel distance.</p>
+      <p class="legend" id="legend"></p>
     </section>
 
     <aside class="rail" id="rail" aria-label="Filters"></aside>
