@@ -1,9 +1,9 @@
 import {
   loadEvents, SEED_USER, estimateTravel, distanceKm, geocode, suggestPlaces, similarity, fetchForecast, SAMPLE_FORECAST,
   INTERESTS, CIRCUMSTANCES, BUDGETS, RANGES, MODES, ART_PALETTES, QUICK_PLACES, TODAY, WANTED_DATE, isCalendarDate
-} from "./data.js?v=27";
-import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js?v=27";
-import { session, api, profileUrl, webUrl, ANSWERS_KEY, clearAnswers } from "./api.js?v=27";
+} from "./data.js?v=28";
+import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js?v=28";
+import { session, api, profileUrl, webUrl, ANSWERS_KEY, clearAnswers } from "./api.js?v=28";
 
 /* Single state object. Every handler mutates state, then calls render(). */
 const state = {
@@ -658,7 +658,9 @@ const artCache = new Map();
 /* Ticketmaster sends a photo or poster for most listings; the campus
    calendars send none. A picture that fails to load falls back to the
    drawn motif, so no card is ever blank. */
-const coverFor = (e) => (/^https:\/\//i.test(e.imageUrl || "") ? e.imageUrl : artFor(e));
+const badCovers = new Set();   /* pictures that failed to load; not asked for again */
+const coverFor = (e) =>
+  (/^https:\/\//i.test(e.imageUrl || "") && !badCovers.has(e.imageUrl) ? e.imageUrl : artFor(e));
 
 function artFor(e) {
   if (artCache.has(e.id)) return artCache.get(e.id);
@@ -1456,7 +1458,10 @@ function mountResults() {
   /* error does not bubble, so it is caught on the way down. */
   el.cards.addEventListener("error", (ev) => {
     const img = ev.target;
-    if (img.tagName === "IMG" && img.dataset.fallback && img.src !== img.dataset.fallback) img.src = img.dataset.fallback;
+    if (img.tagName === "IMG" && img.dataset.fallback && img.src !== img.dataset.fallback) {
+      badCovers.add(img.src);
+      img.src = img.dataset.fallback;
+    }
   }, true);
 
   el.cards.addEventListener("mouseover", (ev) => {
@@ -1762,7 +1767,7 @@ function cardHTML(e, lead) {
   return `<article class="card${lead ? " is-lead" : ""}${out ? " is-out" : ""}${e.id === state.selectedId ? " is-sel" : ""}"
     data-id="${e.id}" tabindex="0" role="button" aria-label="${esc(e.title)}, ${pct} percent match">
     <div class="card-art">
-      <img src="${coverFor(e)}" data-fallback="${artFor(e)}" alt="" loading="lazy" referrerpolicy="no-referrer">
+      <img src="${esc(coverFor(e))}" data-fallback="${artFor(e)}" alt="" loading="lazy" referrerpolicy="no-referrer">
       <span class="pct">${pct}<span class="pct-u">%</span></span>
       ${out ? `<span class="card-flag">${why(e)}</span>` : urgentFlag(e)}
     </div>
