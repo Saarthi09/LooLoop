@@ -1,4 +1,4 @@
-import { session, api, profileUrl, fmtWhen, esc, webUrl, instagramUrl } from "./api.js?v=26";
+import { session, api, profileUrl, fmtWhen, esc, webUrl, instagramUrl } from "./api.js?v=27";
 
 /* Single state object, mutated by handlers, then render(). */
 const state = {

@@ -1,9 +1,9 @@
 import {
   loadEvents, SEED_USER, estimateTravel, distanceKm, geocode, suggestPlaces, similarity, fetchForecast, SAMPLE_FORECAST,
   INTERESTS, CIRCUMSTANCES, BUDGETS, RANGES, MODES, ART_PALETTES, QUICK_PLACES, TODAY, WANTED_DATE, isCalendarDate
-} from "./data.js?v=26";
-import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js?v=26";
-import { session, api, profileUrl, webUrl, ANSWERS_KEY, clearAnswers } from "./api.js?v=26";
+} from "./data.js?v=27";
+import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js?v=27";
+import { session, api, profileUrl, webUrl, ANSWERS_KEY, clearAnswers } from "./api.js?v=27";
 
 /* Single state object. Every handler mutates state, then calls render(). */
 const state = {
@@ -57,10 +57,13 @@ const has = (e, c) => e.circumstances.includes(c);
 
 const isToday = () => state.date === TODAY;
 
+const localDay = (t = new Date()) =>
+  `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+
 const daysFrom = (d, n) => {
   const t = new Date(`${d}T12:00:00`);
   t.setDate(t.getDate() + n);
-  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+  return localDay(t);
 };
 
 const fmtDate = (d) =>
@@ -1072,7 +1075,8 @@ function loadAnswers() {
     const j = JSON.parse(localStorage.getItem(ANSWERS_KEY) || "null");
     if (!j || !j.filters) return false;
     state.filters = { ...state.filters, ...j.filters };
-    if (!RANGES.some((x) => x.id === state.filters.range)) state.filters.range = rangeFor(state.filters.maxTravel);
+    const r = RANGES.find((x) => x.id === state.filters.range);
+    if (!r || r.minutes !== state.filters.maxTravel) state.filters.range = rangeFor(state.filters.maxTravel);
     if (j.origin && Number.isFinite(j.origin.lat)) state.origin = j.origin;
     if (!WANTED_DATE && isCalendarDate(j.date) && j.date >= TODAY) state.date = j.date;
     if (j.travelSource) state.travelSource = j.travelSource;
@@ -1684,14 +1688,54 @@ function renderCards(items) {
     : "";
   const rest = ruled.map((e) => cardHTML(e, false)).join("");
 
-  /* A re-render must not tear down a map the user is looking at: the
-     mounted iframe is kept when the new one would load the same place. */
-  const keep = state.selectedId
-    ? el.cards.querySelector(`.card[data-id="${CSS.escape(String(state.selectedId))}"] .card-map iframe`)
-    : null;
-  el.cards.innerHTML = cards + restHead + rest;
-  const fresh = keep && el.cards.querySelector(".card.is-sel .card-map iframe");
-  if (fresh && fresh.src === keep.src) fresh.replaceWith(keep);
+  mountCards(cards + restHead + rest);
+}
+
+/* A re-render must not tear down a map the user is looking at, and a
+   browser reloads an iframe the moment it is removed or moved, however
+   briefly. So when the selected card already has its map, that card stays
+   exactly where it is: its other parts are swapped in place, the map's
+   links are refreshed around the untouched iframe, and every other card is
+   rebuilt around it. */
+function mountCards(html) {
+  const sel = state.selectedId ? `.card[data-id="${CSS.escape(String(state.selectedId))}"]` : null;
+  const keptCard = sel && el.cards.querySelector(sel);
+  const keptMap = keptCard && keptCard.querySelector(".card-map");
+  if (!keptMap) {
+    el.cards.innerHTML = html;
+    return;
+  }
+
+  const tpl = document.createElement("template");
+  tpl.innerHTML = html;
+  const newCard = tpl.content.querySelector(sel);
+  const newMap = newCard && newCard.querySelector(".card-map");
+  const sameMap = newMap &&
+    (newMap.querySelector("iframe") || {}).src === (keptMap.querySelector("iframe") || {}).src;
+  if (!sameMap) {
+    el.cards.innerHTML = html;
+    return;
+  }
+
+  /* the selected card: attributes, art and body parts, but not the map */
+  for (const { name, value } of newCard.attributes) keptCard.setAttribute(name, value);
+  const oldArt = keptCard.querySelector(".card-art");
+  const newArt = newCard.querySelector(".card-art");
+  if (oldArt && newArt) oldArt.replaceWith(newArt);
+  const oldBody = keptCard.querySelector(".card-body");
+  const newBody = newCard.querySelector(".card-body");
+  for (const c of [...oldBody.children]) if (c !== keptMap) c.remove();
+  for (const c of [...newBody.children]) if (!c.classList.contains("card-map")) oldBody.insertBefore(c, keptMap);
+  const oldLinks = keptMap.querySelector(".card-map-links");
+  const newLinks = newMap.querySelector(".card-map-links");
+  if (oldLinks && newLinks) oldLinks.replaceWith(newLinks);
+
+  /* everything else, rebuilt around it */
+  const nodes = [...tpl.content.childNodes];
+  const at = nodes.indexOf(newCard);
+  for (const c of [...el.cards.childNodes]) if (c !== keptCard) c.remove();
+  nodes.slice(0, at).forEach((n) => el.cards.insertBefore(n, keptCard));
+  nodes.slice(at + 1).forEach((n) => el.cards.appendChild(n));
 }
 
 function urgentFlag(e) {
@@ -1887,7 +1931,7 @@ function render() {
   el.shell.classList.toggle("is-results", !onWizard);
   placeResultsPanel();
   if (el.navProfile) el.navProfile.textContent = session()?.profile?.username || "Log in";
-  if (state.clockFallback) pickClock();
+  if (state.clockFallback || state.nowAuto) pickClock();
   saveAnswers();
 
   if (onWizard) {
@@ -2015,7 +2059,9 @@ setInterval(() => {
   if (state.status !== "ready" || state.screen !== "results") return;
   if (!state.nowAuto && !state.clockFallback) return;   /* a scrubbed clock stays put */
   if (!isToday()) return;                               /* another day: nothing moves */
-  if (state.selectedId) return;                         /* a card with its map open is left alone */
+  /* Past midnight the page is still built for yesterday; the pin must not
+     carry yesterday's finished listings into today as catchable. */
+  if (state.clockPinned && localDay() !== TODAY) state.clockPinned = false;
   pickClock();
   const minute = Math.floor(nowHour() * 60);
   if (minute === lastTickMinute) return;                /* same minute, same ranking */
