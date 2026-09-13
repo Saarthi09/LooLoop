@@ -1,9 +1,9 @@
 import {
-  loadEvents, SEED_USER, estimateTravel, geocode, suggestPlaces, similarity, fetchForecast, SAMPLE_FORECAST,
+  loadEvents, SEED_USER, estimateTravel, distanceKm, geocode, suggestPlaces, similarity, fetchForecast, SAMPLE_FORECAST,
   INTERESTS, CIRCUMSTANCES, BUDGETS, RANGES, MODES, ART_PALETTES, QUICK_PLACES, TODAY, WANTED_DATE, isCalendarDate
-} from "./data.js?v=24";
-import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js?v=24";
-import { session, api, profileUrl, webUrl, ANSWERS_KEY, clearAnswers } from "./api.js?v=24";
+} from "./data.js?v=26";
+import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js?v=26";
+import { session, api, profileUrl, webUrl, ANSWERS_KEY, clearAnswers } from "./api.js?v=26";
 
 /* Single state object. Every handler mutates state, then calls render(). */
 const state = {
@@ -651,6 +651,11 @@ const star = (c, x, y) =>
 
 const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const artCache = new Map();
+
+/* Ticketmaster sends a photo or poster for most listings; the campus
+   calendars send none. A picture that fails to load falls back to the
+   drawn motif, so no card is ever blank. */
+const coverFor = (e) => (/^https:\/\//i.test(e.imageUrl || "") ? e.imageUrl : artFor(e));
 
 function artFor(e) {
   if (artCache.has(e.id)) return artCache.get(e.id);
@@ -1444,6 +1449,12 @@ function mountResults() {
     render();
   });
 
+  /* error does not bubble, so it is caught on the way down. */
+  el.cards.addEventListener("error", (ev) => {
+    const img = ev.target;
+    if (img.tagName === "IMG" && img.dataset.fallback && img.src !== img.dataset.fallback) img.src = img.dataset.fallback;
+  }, true);
+
   el.cards.addEventListener("mouseover", (ev) => {
     const card = ev.target.closest(".card");
     if (card) state.hoverId = card.dataset.id;
@@ -1707,7 +1718,7 @@ function cardHTML(e, lead) {
   return `<article class="card${lead ? " is-lead" : ""}${out ? " is-out" : ""}${e.id === state.selectedId ? " is-sel" : ""}"
     data-id="${e.id}" tabindex="0" role="button" aria-label="${esc(e.title)}, ${pct} percent match">
     <div class="card-art">
-      <img src="${artFor(e)}" alt="" loading="lazy">
+      <img src="${coverFor(e)}" data-fallback="${artFor(e)}" alt="" loading="lazy" referrerpolicy="no-referrer">
       <span class="pct">${pct}<span class="pct-u">%</span></span>
       ${out ? `<span class="card-flag">${why(e)}</span>` : urgentFlag(e)}
     </div>
@@ -1767,26 +1778,15 @@ function renderTip() {
 }
 
 function showTip(e, dot) {
-  const pct = matchPct(e);
+  const km = e.lat != null && e.lng != null ? distanceKm(state.origin, e) : null;
+  const far = km == null ? "" : km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(km < 10 ? 1 : 0)} km`;
   el.tip.innerHTML = `
-    <img class="tip-art" src="${artFor(e)}" alt="">
-    <div class="tip-body">
-      <div class="tip-top">
-        <span class="tip-title">${esc(e.title)}</span>
-        <span class="pct pct-flat">${pct}<span class="pct-u">%</span></span>
-      </div>
-      <p class="tip-venue">${esc(e.venue)}</p>
-      <p class="tip-desc">${esc(e.description || "")}</p>
-      <dl class="tip-grid">
-        <dt>Time</dt><dd><strong>${fmtClock(e.hour)}</strong> to <strong>${fmtClock(e.endHour)}</strong></dd>
-        <dt>Getting there</dt><dd><strong>${e.travelMinutes} min</strong> ${modeWord(e.travelMode)}</dd>
-        <dt>Costs</dt><dd><strong>${costLine(e)}</strong></dd>
-        <dt>Leave by</dt><dd><strong>${fmtClock(e.leaveBy)}</strong>, back by <strong>${fmtClock(e.backBy)}</strong></dd>
-      </dl>
-      ${weatherNote(e)}
-      ${compatHTML(e, true)}
-      <p class="tip-why">${why(e)}</p>
-    </div>`;
+    <span class="tip-title">${esc(e.title)}</span>
+    <dl class="tip-grid">
+      <dt>Time</dt><dd>${fmtClock(e.hour)} to ${fmtClock(e.endHour)}</dd>
+      <dt>Distance</dt><dd>${far ? `${far}, ` : ""}${e.travelMinutes} min ${modeWord(e.travelMode)}</dd>
+      <dt>Price</dt><dd>${costLine(e)}</dd>
+    </dl>`;
   el.tip.hidden = false;
 
   const wrap = el.wrap.getBoundingClientRect();

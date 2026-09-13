@@ -4,7 +4,7 @@
    plain static server (Live Server, python -m http.server) the API is on
    port 3000 instead. When it cannot be reached, or has nothing on for
    today, the seed set below stands in and is labelled as a sample. */
-import { API_BASE } from "./api.js?v=24";
+import { API_BASE } from "./api.js?v=26";
 
 export const USE_API = true;
 export const API_URL = `${API_BASE}/api/events`;
