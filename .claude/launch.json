@@ -3,9 +3,9 @@
   "configurations": [
     {
       "name": "loo-loop",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8000"],
-      "port": 8000
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["backend/server.js"],
+      "port": 3000
     }
   ]
 }

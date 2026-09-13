@@ -5,10 +5,18 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { rankEventsWithGemini } from "./services/gemini.js";
+import {
+  buildFeed,
+  isDateString,
+  localDateOf,
+  stamp,
+  torontoDayRange,
+} from "./services/events.js";
 
 const app = express();
 const here = path.dirname(fileURLToPath(import.meta.url));
-const frontendPath = path.join(here, "..", "first");
+const rootPath = path.join(here, "..");
+const legacyPath = path.join(rootPath, "first");
 dotenv.config({ path: path.join(here, ".env") });
 const port = process.env.PORT || 3000;
 const ticketmasterKey = process.env.TICKETMASTER_API_KEY;
@@ -19,7 +27,13 @@ const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
 
 app.use(cors());
 app.use(express.json());
-app.use("/", express.static(frontendPath));
+
+// The radial front-end at the repo root is the front door. The earlier
+// pages in first/ (questionnaire, profile, circles) stay under /first.
+// Only the folders a browser needs are exposed; backend/ never is.
+app.use("/css", express.static(path.join(rootPath, "css")));
+app.use("/js", express.static(path.join(rootPath, "js")));
+app.use("/first", express.static(legacyPath));
 
 function getSize(value) {
   return Math.min(Math.max(Number(value) || 12, 1), 25);
@@ -186,7 +200,8 @@ function normalizeWaterlooEvent(event) {
   };
 }
 
-async function getWaterlooEvents({ size, keyword = "" }) {
+// The raw Waterloo Events listing, untouched, for the /api/events feed.
+async function fetchWaterlooEvents(size) {
   if (!uWaterlooKey) {
     throw new Error("University of Waterloo API is not configured.");
   }
@@ -197,7 +212,11 @@ async function getWaterlooEvents({ size, keyword = "" }) {
   );
   const events = await response.json();
   if (!response.ok) throw new Error("University of Waterloo request failed.");
+  return Array.isArray(events) ? events : [];
+}
 
+async function getWaterlooEvents({ size, keyword = "" }) {
+  const events = await fetchWaterlooEvents(size);
   const query = keyword.toLowerCase();
   return events
     .filter(
@@ -247,6 +266,81 @@ async function getTicketmasterEvents(req, size) {
     source: "Ticketmaster",
   }));
 }
+
+// How many students have joined each event's circle, keyed by event id.
+async function getCircleCounts() {
+  const supabase = createSupabaseClient();
+  if (!supabase) return new Map();
+
+  const { data: circles, error: circleError } = await supabase
+    .from("event_circles")
+    .select("id, event_id");
+  if (circleError) throw new Error(circleError.message);
+
+  const { data: members, error: memberError } = await supabase
+    .from("event_circle_members")
+    .select("circle_id");
+  if (memberError) throw new Error(memberError.message);
+
+  const byCircle = new Map();
+  members.forEach((member) => {
+    byCircle.set(member.circle_id, (byCircle.get(member.circle_id) || 0) + 1);
+  });
+  return new Map(
+    circles.map((circle) => [circle.event_id, byCircle.get(circle.id) || 0]),
+  );
+}
+
+// One day of listings in the shape the radial front-end reads.
+// Waterloo Region only: Ticketmaster within 30 km of uptown, plus every
+// campus event Waterloo Events publishes. Missing providers are reported
+// in `warnings` rather than failing the whole feed.
+app.get("/api/events", async (req, res) => {
+  const date = isDateString(req.query.date)
+    ? req.query.date
+    : localDateOf(new Date());
+  const { start, end } = torontoDayRange(date);
+  const ticketmasterRequest = {
+    query: {
+      latlong: "43.4643,-80.5204",
+      radius: "30",
+      unit: "km",
+      countryCode: "CA",
+      startDateTime: stamp(start),
+      endDateTime: stamp(end),
+    },
+  };
+
+  const [ticketmaster, waterloo, circles] = await Promise.allSettled([
+    getTicketmasterEvents(ticketmasterRequest, 100),
+    fetchWaterlooEvents(100),
+    getCircleCounts(),
+  ]);
+
+  const warnings = [];
+  if (ticketmaster.status === "rejected") {
+    warnings.push(`Ticketmaster: ${ticketmaster.reason.message}`);
+  }
+  if (waterloo.status === "rejected") {
+    warnings.push(`University of Waterloo: ${waterloo.reason.message}`);
+  }
+  if (circles.status === "rejected") {
+    warnings.push(`Circles: ${circles.reason.message}`);
+  }
+
+  const events = buildFeed({
+    date,
+    ticketmaster: ticketmaster.value || [],
+    waterloo: waterloo.value || [],
+    circles: circles.value || new Map(),
+  });
+  const sources = [
+    ticketmasterKey && ticketmaster.status === "fulfilled" && "Ticketmaster",
+    uWaterlooKey && waterloo.status === "fulfilled" && "Waterloo Events",
+  ].filter(Boolean);
+
+  res.json({ date, events, sources, warnings });
+});
 
 app.get("/api/health", (_req, res) => {
   res.json({
@@ -675,8 +769,8 @@ app.post("/api/recommend", async (req, res) => {
   }
 });
 
-app.get("/", (_req, res) => {
-  res.sendFile(path.join(frontendPath, "index.html"));
+app.get(["/", "/index.html"], (_req, res) => {
+  res.sendFile(path.join(rootPath, "index.html"));
 });
 
 app.listen(port, () => {

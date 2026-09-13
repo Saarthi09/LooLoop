@@ -1,6 +1,6 @@
 import {
   loadEvents, SEED_USER, estimateTravel, geocode, similarity, fetchForecast, SAMPLE_FORECAST,
-  INTERESTS, CIRCUMSTANCES, BUDGETS, SCOPES, ART_PALETTES, QUICK_PLACES
+  INTERESTS, CIRCUMSTANCES, BUDGETS, SCOPES, ART_PALETTES, QUICK_PLACES, API_BASE
 } from "./data.js";
 import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js";
 
@@ -9,6 +9,9 @@ const state = {
   status: "loading",
   error: null,
   events: [],
+  feed: { live: false, note: "" },   // where the listings came from
+  joining: null,             // event id with a circle request in flight
+  circleNote: null,          // { id, text } shown under one card
   screen: "wizard",          // wizard | results
   step: 0,
   origin: { ...SEED_USER.origin },
@@ -100,8 +103,9 @@ function decorate(events, f) {
     const missed = duration > 0 ? clamp((arriveAt - h) / (endHour - h), 0, 1) : 0;
     const catchable = !over && arriveAt <= endHour - 0.25;
 
+    /* A listing with no published price cannot be ruled out on cost. */
     const userOk = f.circumstances.every((c) => e.circumstances.includes(c)) &&
-      e.price <= budgetMax(f.budget) &&
+      (e.price == null || e.price <= budgetMax(f.budget)) &&
       (f.scope !== "campus" || e.scope === "campus");
 
     return {
@@ -175,6 +179,7 @@ const travelFit = (e) =>
 
 function moneyFit(e) {
   if (e.price === 0) return 1;
+  if (e.price == null) return 0.6;
   const cap = budgetMax(state.filters.budget);
   if (cap === Infinity) return Math.max(0.2, 1 - e.price / 60);
   if (e.price <= cap) return 1 - (e.price / cap) * 0.35;
@@ -229,7 +234,9 @@ const modeWord = (m) =>
   m === "walk" ? "on foot" : m === "transit" ? "on the bus" : m === "bike" ? "by bike" : "by car";
 
 const costLine = (e) =>
-  e.price === 0 ? "Free" : has(e, "student-price") ? `$${e.price} student` : `$${e.price}`;
+  e.price === 0 ? "Free"
+    : e.price == null ? "Not listed"
+      : has(e, "student-price") ? `$${e.price} student` : `$${e.price}`;
 
 function fmtDuration(min) {
   const h = Math.floor(min / 60), m = min % 60;
@@ -240,7 +247,7 @@ function fmtDuration(min) {
 function perks(e) {
   const bits = [];
   if (e.price === 0) bits.push("costs nothing");
-  else if (has(e, "student-price")) bits.push(`$${e.price} with a student card`);
+  else if (e.price != null && has(e, "student-price")) bits.push(`$${e.price} with a student card`);
   if (has(e, "free-food")) bits.push("food provided");
   if (has(e, "drop-in")) bits.push("no signup");
   if (has(e, "beginner-welcome")) bits.push("no experience needed");
@@ -587,9 +594,11 @@ const el = {
   stepBack: document.getElementById("step-back"),
   stepNext: document.getElementById("step-next"),
   stepSkip: document.getElementById("step-skip"),
+  stepFeed: document.getElementById("step-feed"),
 
   results: document.getElementById("results"),
   standfirst: document.getElementById("standfirst"),
+  navProfile: document.getElementById("nav-profile"),
   spans: document.getElementById("spans"),
   legend: document.getElementById("legend"),
   wrap: document.getElementById("canvas-wrap"),
@@ -808,6 +817,7 @@ function updateStep() {
   el.stepLiveT.textContent = n === 1
     ? `thing matches so far, out of ${state.events.length}`
     : `things match so far, out of ${state.events.length}`;
+  el.stepFeed.textContent = state.feed.note;
 
   [...el.stepDots.children].forEach((d, i) => {
     d.classList.toggle("is-on", i === state.step);
@@ -948,6 +958,103 @@ async function useMyLocation() {
   );
 }
 
+/* ---- circles ---------------------------------------------------------
+   The backend keeps a "circle" per event: the students who said they are
+   going, with the Instagram handle they chose to share. Joining needs the
+   session the profile page stores in localStorage. */
+
+const SESSION_KEY = "looloop-session";
+const PROFILE_URL = "first/profile.html";
+const CIRCLES_URL = "first/circles.html";
+const joined = new Set();
+
+function session() {
+  try {
+    return JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
+  } catch (err) {
+    return null;
+  }
+}
+
+function dropSession() {
+  localStorage.removeItem(SESSION_KEY);
+  joined.clear();
+}
+
+async function loadJoined() {
+  const s = session();
+  if (!s?.accessToken) return;
+  try {
+    const r = await fetch(`${API_BASE}/api/circles/mine`, {
+      headers: { Authorization: `Bearer ${s.accessToken}` }
+    });
+    if (r.status === 401) return dropSession();
+    if (!r.ok) return;
+    const j = await r.json();
+    (j.circles || []).forEach((c) => joined.add(String(c.event_id)));
+    render();
+  } catch (err) {
+    /* The map still works without knowing which circles you are in. */
+  }
+}
+
+function toProfile() {
+  const next = encodeURIComponent(window.location.pathname + window.location.search);
+  window.location.href = `${PROFILE_URL}?next=${next}`;
+}
+
+async function joinCircle(e) {
+  const s = session();
+  if (!s?.accessToken) return toProfile();
+  const id = String(e.id);
+  state.joining = id;
+  state.circleNote = null;
+  render();
+  try {
+    const r = await fetch(`${API_BASE}/api/circles/join`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${s.accessToken}` },
+      body: JSON.stringify({
+        eventId: id,
+        eventName: e.title,
+        eventUrl: e.source?.url || null,
+        eventDate: e.startsAt
+      })
+    });
+    if (r.status === 401) {
+      dropSession();
+      return toProfile();
+    }
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || "Could not join this circle.");
+    joined.add(id);
+    const raw = state.events.find((x) => String(x.id) === id);
+    if (raw) raw.goingCount = (raw.goingCount || 0) + 1;
+    state.circleNote = { id, text: "You're in. Others who join can see your handle." };
+  } catch (err) {
+    state.circleNote = { id, text: err.message };
+  }
+  state.joining = null;
+  render();
+}
+
+function circleHTML(e) {
+  const id = String(e.id);
+  const n = e.goingCount || 0;
+  const busy = state.joining === id;
+  const note = state.circleNote && state.circleNote.id === id ? state.circleNote.text : "";
+  const src = e.source?.url
+    ? `<a class="link" href="${esc(e.source.url)}" target="_blank" rel="noreferrer">${esc(e.source.name || "Details")}</a>`
+    : `<span class="card-going">${n ? `${n} going` : ""}</span>`;
+  const action = joined.has(id)
+    ? `<a class="btn btn-join is-in" href="${CIRCLES_URL}">You're in, see who else</a>`
+    : `<button type="button" class="btn btn-join" data-join="${esc(id)}"${busy ? " disabled" : ""}>
+        ${busy ? "Joining" : n ? `Join circle, ${n} going` : "Join circle"}
+       </button>`;
+  return `<div class="card-actions">${src}${action}</div>` +
+    (note ? `<p class="card-circle-note">${esc(note)}</p>` : "");
+}
+
 /* ---- results --------------------------------------------------------- */
 
 function mountResults() {
@@ -978,6 +1085,14 @@ function mountResults() {
       render();
       return;
     }
+    const join = ev.target.closest("[data-join]");
+    if (join) {
+      const e = state.events.find((x) => String(x.id) === join.dataset.join);
+      if (e) joinCircle(e);
+      return;
+    }
+    /* Links inside a card go where they say; they do not select the card. */
+    if (ev.target.closest("a")) return;
     const card = ev.target.closest(".card");
     if (!card) return;
     state.selectedId = state.selectedId === card.dataset.id ? null : card.dataset.id;
@@ -1010,6 +1125,7 @@ function mountRail() {
     <div class="rail-head">
       <p class="rail-count" id="count">0</p>
       <p class="rail-note" id="count-note"></p>
+      <p class="rail-feed" id="feed-note"></p>
     </div>
 
     <div class="answers">
@@ -1049,7 +1165,7 @@ function mountRail() {
     nowTime: q("#now-time"), nowRange: q("#now-range"),
     nowWeather: q("#now-weather"), nowEffect: q("#now-effect"),
     nowReset: q("#now-reset"), nowRain: q("#now-rain"),
-    count: q("#count"), countNote: q("#count-note"), list: q("#answers-list"),
+    count: q("#count"), countNote: q("#count-note"), feed: q("#feed-note"), list: q("#answers-list"),
     windowVal: q("#window-val"), travelVal: q("#travel-val"),
     winStart: q("#win-start"), winEnd: q("#win-end"), travel: q("#travel")
   };
@@ -1128,6 +1244,7 @@ function updateRail(items) {
     ? `fit somewhere in the day, out of ${shown.length}.`
     : `fit between ${fmtClock(s.start)} and ${fmtClock(s.end)}, out of ${shown.length} on then.`) +
     (gone ? ` ${gone} already finished.` : "");
+  rail.feed.textContent = state.feed.note;
 
   const intoLabels = f.interests.map((i) => labelOf(INTERESTS, i));
   const needLabels = f.circumstances.map((c) => labelOf(CIRCUMSTANCES, c));
@@ -1232,6 +1349,7 @@ function cardHTML(e, lead) {
         <div><dt>Leave by</dt><dd><strong>${fmtClock(e.leaveBy)}</strong></dd></div>
         <div><dt>Back by</dt><dd><strong>${fmtClock(e.backBy)}</strong></dd></div>
       </dl>
+      ${circleHTML(e)}
     </div>
   </article>`;
 }
@@ -1296,6 +1414,7 @@ function render() {
   const onWizard = state.screen === "wizard";
   el.wizard.hidden = !onWizard;
   el.results.hidden = onWizard;
+  el.navProfile.textContent = session()?.profile?.username || "Profile";
 
   if (onWizard) {
     renderStep();
@@ -1362,13 +1481,15 @@ function esc(s) {
 /* ---- boot ------------------------------------------------------------ */
 
 loadEvents()
-  .then((events) => {
+  .then(({ events, feed }) => {
     state.events = events;
+    state.feed = feed;
     state.status = "ready";
     mountWizard();
     mountResults();
     mountRail();
     render();
+    loadJoined();
   })
   .catch((err) => {
     state.error = err.message;

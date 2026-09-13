@@ -1,8 +1,25 @@
-export const USE_API = false;
-export const API_URL = "/api/events";
+/* ---- where the listings come from ------------------------------------
+   The Express server in backend/ merges Ticketmaster and Waterloo Events
+   into the shape used below and serves it at /api/events. Opened from a
+   plain static server (Live Server, python -m http.server) the API is on
+   port 3000 instead. When it cannot be reached, or has nothing on for
+   today, the seed set below stands in and is labelled as a sample. */
+export const USE_API = true;
+export const API_BASE = ["5500", "5501", "8000"].includes(window.location.port)
+  ? "http://localhost:3000"
+  : "";
+export const API_URL = `${API_BASE}/api/events`;
 
-const D = "2026-09-13";
-const Z = "-04:00";
+/* Today, in the browser's own zone, so the seed always reads as today. */
+const pad = (n) => String(n).padStart(2, "0");
+const localDate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const offsetOf = (d) => {
+  const m = -d.getTimezoneOffset();
+  return `${m < 0 ? "-" : "+"}${pad(Math.floor(Math.abs(m) / 60))}:${pad(Math.abs(m) % 60)}`;
+};
+export const TODAY = localDate(new Date());
+const D = TODAY;
+const Z = offsetOf(new Date());
 const at = (t) => `${D}T${t}:00${Z}`;
 
 /* ---- taxonomy --------------------------------------------------------
@@ -1051,11 +1068,40 @@ export const SEED_USER = {
   circumstances: []
 };
 
+const SAMPLE_FEED = (note) => ({ events: SEED_EVENTS, feed: { live: false, note } });
+
+/* The server already builds this shape; this only guards the fields the
+   ranking reads unconditionally, so one odd listing cannot stop the page. */
+function fromFeed(e) {
+  return {
+    ...e,
+    tags: Array.isArray(e.tags) && e.tags.length ? e.tags : ["social"],
+    circumstances: Array.isArray(e.circumstances) ? e.circumstances : [],
+    price: typeof e.price === "number" ? e.price : null,
+    travelMinutes: Number.isFinite(e.travelMinutes) ? e.travelMinutes : 30,
+    travelMode: e.travelMode || "transit",
+    setting: e.setting || "indoor",
+    scope: e.scope || "any",
+    goingCount: e.goingCount || 0
+  };
+}
+
+/* Resolves to { events, feed }, where feed says whether these are live. */
 export async function loadEvents() {
-  if (!USE_API) return SEED_EVENTS;
-  const r = await fetch(API_URL);
-  if (!r.ok) throw new Error(`events ${r.status}`);
-  return r.json();
+  if (!USE_API) return SAMPLE_FEED("Sample listings.");
+  try {
+    const r = await fetch(`${API_URL}?date=${D}`, { headers: { Accept: "application/json" } });
+    if (!r.ok) throw new Error(`events ${r.status}`);
+    const j = await r.json();
+    const events = (Array.isArray(j) ? j : j.events || []).map(fromFeed);
+    if (!events.length) {
+      return SAMPLE_FEED("The live feed has nothing on for today, so these are sample listings.");
+    }
+    const from = (j.sources || []).join(" and ");
+    return { events, feed: { live: true, note: `Live listings for today${from ? ` from ${from}` : ""}.` } };
+  } catch (err) {
+    return SAMPLE_FEED("The listings server is not running, so these are sample listings.");
+  }
 }
 
 /* ---- travel model ----------------------------------------------------

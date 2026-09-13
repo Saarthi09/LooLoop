@@ -17,6 +17,12 @@ function saveSession(payload) {
     }),
   );
   showProfile(payload.profile);
+
+  // The map sends people here to log in; send them straight back.
+  const next = new URLSearchParams(window.location.search).get("next");
+  if (next && next.startsWith("/") && !next.startsWith("//")) {
+    window.location.href = next;
+  }
 }
 
 function showProfile(profile) {
