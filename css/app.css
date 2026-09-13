@@ -74,22 +74,22 @@ body {
 }
 
 /* Results in the side panel: the same blocks the rail used, on deep. */
-.side .rail-count { color: var(--on-deep); }
-.side .rail-note,
-.side .rail-feed,
-.side .rail-cap,
-.side .slider-cap { color: var(--on-deep-2); }
-.side .rail-h,
-.side .rail-val { color: var(--on-deep); }
-.side .nowbox,
-.side .answers { background: var(--deep-2); }
-.side .slider input[type="range"] { accent-color: var(--accent); }
-.side .slider input[type="range"]:focus-visible { outline-color: var(--accent); }
-.side .tune { padding-top: 4px; }
-.side .link { color: var(--on-deep-2); }
-.side .link:hover { color: var(--on-deep); }
-.side .link:focus-visible { outline-color: var(--accent); }
-.side .now-effect { color: var(--on-deep); font-weight: 500; }
+:is(.side, #side-results, .main-results > #side-results) .rail-count { color: var(--on-deep); }
+:is(.side, #side-results, .main-results > #side-results) .rail-note,
+:is(.side, #side-results, .main-results > #side-results) .rail-feed,
+:is(.side, #side-results, .main-results > #side-results) .rail-cap,
+:is(.side, #side-results, .main-results > #side-results) .slider-cap { color: var(--on-deep-2); }
+:is(.side, #side-results, .main-results > #side-results) .rail-h,
+:is(.side, #side-results, .main-results > #side-results) .rail-val { color: var(--on-deep); }
+:is(.side, #side-results, .main-results > #side-results) .nowbox,
+:is(.side, #side-results, .main-results > #side-results) .answers { background: var(--deep-2); }
+:is(.side, #side-results, .main-results > #side-results) .slider input[type="range"] { accent-color: var(--accent); }
+:is(.side, #side-results, .main-results > #side-results) .slider input[type="range"]:focus-visible { outline-color: var(--accent); }
+:is(.side, #side-results, .main-results > #side-results) .tune { padding-top: 4px; }
+:is(.side, #side-results, .main-results > #side-results) .link { color: var(--on-deep-2); }
+:is(.side, #side-results, .main-results > #side-results) .link:hover { color: var(--on-deep); }
+:is(.side, #side-results, .main-results > #side-results) .link:focus-visible { outline-color: var(--accent); }
+:is(.side, #side-results, .main-results > #side-results) .now-effect { color: var(--on-deep); font-weight: 500; }
 
 .wordmark-deep { color: var(--on-deep); }
 
@@ -840,6 +840,9 @@ body {
 
 .card.is-lead .card-desc { -webkit-line-clamp: 3; }
 
+/* A listing with nothing to say takes no room saying it. */
+.card-desc:empty { display: none; }
+
 .card-facts {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -874,6 +877,30 @@ body {
 }
 
 .cards-more { grid-column: 1 / -1; }
+
+/* The selected listing opens up with a map. */
+.card.is-sel { grid-column: 1 / -1; }
+
+.card-map { margin-top: 10px; }
+
+.card-map iframe {
+  display: block;
+  width: 100%;
+  height: 260px;
+  border: 1px solid var(--hair);
+  border-radius: var(--r-sm);
+  background: var(--paper-2);
+}
+
+.card-map-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 7px;
+  font-size: 13px;
+}
+
+.card-map-links .link { font-size: 13px; }
 
 /* The rest of the day, under the ones that fit. */
 .cards-rest-head {
@@ -1132,11 +1159,13 @@ body {
 
   /* On a phone app.js moves the answers panel after the main column, so
      the DOM order is the visual order. Out here it keeps the deep look. */
-  .shell > #side-results {
+  .main-results > #side-results {
     background: var(--deep);
     color: var(--on-deep);
     padding: 18px 20px;
     gap: 12px;
+    margin: 18px 0 8px 0;
+    border-radius: var(--r-lg);
   }
 
   .step-count { margin-top: 6px; }

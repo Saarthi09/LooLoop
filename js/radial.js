@@ -250,7 +250,7 @@ export function createRadial(root, { onSelect, onHover } = {}) {
       ringEls[i].style.opacity = on ? "" : "0";
       ringLabels[i].setAttribute("x", CX - r);
       /* Drop the label rather than let it collide with the rim's own. */
-      ringLabels[i].style.opacity = on && r < R_MAX - 40 ? "" : "0";
+      ringLabels[i].style.opacity = on && r < R_MAX - 60 ? "" : "0";
       ringLabels[i].textContent = `${m} min`;
     });
     rim.setAttribute("r", R_MAX);

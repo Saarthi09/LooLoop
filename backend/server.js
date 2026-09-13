@@ -236,7 +236,7 @@ async function getWaterlooEvents({ size, keyword = "" }) {
     .map(normalizeWaterlooEvent);
 }
 
-async function getTicketmasterEvents(req, size) {
+async function getTicketmasterEvents(req, size, warnings = []) {
   if (!ticketmasterKey) return [];
 
   const url = new URL("https://app.ticketmaster.com/discovery/v2/events.json");
@@ -267,12 +267,23 @@ async function getTicketmasterEvents(req, size) {
   const maxPages = 5;
   for (let pageNo = 0; pageNo < maxPages; pageNo += 1) {
     url.searchParams.set("page", String(pageNo));
-    const response = await fetch(url);
-    const payload = await response.json();
-    if (!response.ok) {
-      throw new Error(
-        payload.fault?.faultstring || "Ticketmaster request failed.",
+    let payload;
+    try {
+      const response = await fetch(url);
+      payload = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          payload.fault?.faultstring || "Ticketmaster request failed.",
+        );
+      }
+    } catch (err) {
+      // A later page failing must not throw away the pages already in
+      // hand; say so and serve what there is.
+      if (pageNo === 0) throw err;
+      warnings.push(
+        `Ticketmaster: page ${pageNo + 1} failed (${err.message}); showing the ${events.length} already fetched.`,
       );
+      break;
     }
     events.push(...(payload._embedded?.events || []));
     const totalPages = Number(payload.page?.totalPages) || 1;
@@ -349,14 +360,14 @@ app.get("/api/events", async (req, res) => {
     },
   };
 
+  const warnings = [];
   const [wusa, ticketmaster, waterloo, circles] = await Promise.allSettled([
     nearCampus ? fetchWusaEvents() : Promise.resolve([]),
-    getTicketmasterEvents(ticketmasterRequest, 200),
+    getTicketmasterEvents(ticketmasterRequest, 200, warnings),
     nearCampus ? fetchWaterlooEvents(25) : Promise.resolve([]), // the API's documented maximum
     getCircleCounts(),
   ]);
 
-  const warnings = [];
   if (wusa.status === "rejected") {
     warnings.push(`WUSA: ${wusa.reason.message}`);
   }

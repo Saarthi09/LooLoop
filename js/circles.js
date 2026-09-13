@@ -1,4 +1,4 @@
-import { session, api, profileUrl, fmtWhen, esc, webUrl, instagramUrl } from "./api.js?v=16";
+import { session, api, profileUrl, fmtWhen, esc, webUrl, instagramUrl } from "./api.js?v=22";
 
 /* Single state object, mutated by handlers, then render(). */
 const state = {
@@ -64,6 +64,10 @@ async function join(circle) {
       }
     });
     state.mine.add(circle.id);
+    /* Counted at once so the card never reads "N going, including you"
+       with N excluding you; the member list openCircle fetches then sets
+       the real number. */
+    circle.member_count = (circle.member_count || 0) + 1;
     state.note = { id: circle.id, text: "You're in." };
     state.busy = null;
     openCircle(circle.id);

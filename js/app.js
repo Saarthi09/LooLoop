@@ -1,9 +1,9 @@
 import {
   loadEvents, SEED_USER, estimateTravel, geocode, suggestPlaces, similarity, fetchForecast, SAMPLE_FORECAST,
-  INTERESTS, CIRCUMSTANCES, BUDGETS, SCOPES, ART_PALETTES, QUICK_PLACES
-} from "./data.js?v=16";
-import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js?v=16";
-import { session, api, profileUrl, webUrl, ANSWERS_KEY, clearAnswers } from "./api.js?v=16";
+  INTERESTS, CIRCUMSTANCES, BUDGETS, RANGES, MODES, ART_PALETTES, QUICK_PLACES, TODAY, WANTED_DATE, isCalendarDate
+} from "./data.js?v=22";
+import { createRadial, stateOf, fmtClock, SPANS } from "./radial.js?v=22";
+import { session, api, profileUrl, webUrl, ANSWERS_KEY, clearAnswers } from "./api.js?v=22";
 
 /* Single state object. Every handler mutates state, then calls render(). */
 const state = {
@@ -15,6 +15,7 @@ const state = {
   circleNote: null,          // { id, text } shown under one card
   screen: "wizard",          // wizard | results
   step: 0,
+  date: WANTED_DATE || TODAY, // the day being planned
   returnTo: null,            // "results" while editing one answer from the results
   clockFallback: false,      // true when the real clock is past the window and we pretend
   origin: { ...SEED_USER.origin },
@@ -34,7 +35,8 @@ const state = {
     windowEnd: 21,
     maxTravel: SEED_USER.maxTravelMinutes,
     budget: SEED_USER.budget,
-    scope: SEED_USER.scope,
+    range: SEED_USER.range,
+    mode: SEED_USER.mode,
     circumstances: [],
     interests: []
   }
@@ -52,8 +54,14 @@ const has = (e, c) => e.circumstances.includes(c);
    it is, and what the weather is doing. Neither is a filter. They move
    events up and down the ranking and decide what is still catchable. */
 
+const isToday = () => state.date === TODAY;
+
+const fmtDate = (d) =>
+  new Date(`${d}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+
 function nowHour() {
   if (!state.nowAuto) return state.nowManual;
+  if (!isToday()) return 0;   /* another day: nothing has started or finished */
   const d = new Date();
   return d.getHours() + d.getMinutes() / 60;
 }
@@ -70,7 +78,7 @@ async function ensureWeather() {
   if (state.weather || state.weatherBusy) return;
   state.weatherBusy = true;
   try {
-    state.weather = await fetchForecast(state.origin);
+    state.weather = await fetchForecast(state.origin, state.date);
   } catch (err) {
     /* A demo on bad wifi still needs something to rank against. */
     state.weather = SAMPLE_FORECAST;
@@ -86,8 +94,11 @@ const hourOf = (iso) => {
   return d.getHours() + d.getMinutes() / 60;
 };
 
-const travelFor = (e) =>
-  state.travelSource === "feed" ? e.travelMinutes : (estimateTravel(state.origin, e) ?? e.travelMinutes);
+const travelFor = (e) => {
+  const mode = state.filters.mode;
+  if (mode && mode !== "auto") return estimateTravel(state.origin, e, mode) ?? e.travelMinutes;
+  return state.travelSource === "feed" ? e.travelMinutes : (estimateTravel(state.origin, e) ?? e.travelMinutes);
+};
 
 function decorate(events, f) {
   const now = nowHour();
@@ -108,14 +119,14 @@ function decorate(events, f) {
 
     /* A listing with no published price cannot be ruled out on cost. */
     const userOk = f.circumstances.every((c) => e.circumstances.includes(c)) &&
-      (e.price == null || e.price <= budgetMax(f.budget)) &&
-      (f.scope !== "campus" || e.scope === "campus");
+      (e.price == null || e.price <= budgetMax(f.budget));
 
     return {
       ...e,
       hour: h,
       endHour,
       travelMinutes: travel,
+      travelMode: f.mode && f.mode !== "auto" ? f.mode : e.travelMode,
       durationMin: Math.round(duration),
       totalMinutes: Math.round(duration + travel * 2),
       backBy: (endHour + travel / 60) % 24,
@@ -150,8 +161,9 @@ function chipCount(kind, value, on) {
       .length;
   }
   const patch = kind === "budget" ? { budget: value }
-    : kind === "scope" ? { scope: value, maxTravel: (SCOPES.find((x) => x.id === value) || {}).minutes }
-      : { circumstances: on ? f.circumstances : [...f.circumstances, value] };
+    : kind === "range" ? { range: value, maxTravel: (RANGES.find((x) => x.id === value) || {}).minutes }
+      : kind === "mode" ? { mode: value }
+        : { circumstances: on ? f.circumstances : [...f.circumstances, value] };
   return countWith(withPatch(patch));
 }
 
@@ -234,7 +246,8 @@ function matchPct(e) {
 /* ---- words ----------------------------------------------------------- */
 
 const modeWord = (m) =>
-  m === "walk" ? "on foot" : m === "transit" ? "on the bus" : m === "bike" ? "by bike" : "by car";
+  m === "walk" ? "on foot" : m === "transit" ? "on the bus" : m === "bike" ? "by bike"
+    : m === "train" ? "by train" : "by car";
 
 const costLine = (e) =>
   e.price === 0 ? "Free"
@@ -265,7 +278,6 @@ function why(e) {
   if (isMatch(e)) return "fits";
   if (e.over) return "already finished";
   if (!e.catchable) return "you'd miss it";
-  if (state.filters.scope === "campus" && e.scope !== "campus") return "off campus";
   if (e.price != null && e.price > budgetMax(state.filters.budget)) return "over budget";
   if (!e.passes) return "ruled out";
   if (!e.reachable) return "too far";
@@ -686,6 +698,8 @@ const radial = createRadial(el.svg, {
   onSelect: (id) => {
     state.selectedId = state.selectedId === id ? null : id;
     render();
+    const card = state.selectedId && document.querySelector(".card.is-sel");
+    if (card) card.scrollIntoView({ block: "center" });
   },
   onHover: (id) => {
     state.hoverId = id;
@@ -746,15 +760,18 @@ const STEPS = [
     hint: "The gap between finishing work and wanting to sleep.",
     body: () => `
       <div class="times">
+        <label class="time"><span>Day</span><input type="date" id="w-date" min="${TODAY}" value="${state.date}"></label>
         <label class="time"><span>From</span><input type="time" id="w-from" value="${toTimeValue(state.filters.windowStart)}"></label>
         <label class="time"><span>Until</span><input type="time" id="w-to" value="${toTimeValue(state.filters.windowEnd)}"></label>
       </div>`
   },
   {
-    id: "scope",
+    id: "range",
     q: "How far will you go?",
-    hint: "This sets the travel limit. You can stretch it on the results.",
-    body: () => `<div class="chips chips-big">${SCOPES.map((s) => chipHTML("scope", s.id, s.label)).join("")}</div>`
+    hint: "As travel time from where you start, so it means the same thing anywhere. You can stretch it on the results.",
+    body: () => `<div class="chips chips-big">${RANGES.map((s) => chipHTML("range", s.id, s.label)).join("")}</div>
+      <p class="ask-sub">Getting around by</p>
+      <div class="chips chips-big">${MODES.map((m) => chipHTML("mode", m.id, m.label)).join("")}</div>`
   },
   {
     id: "needs",
@@ -832,7 +849,8 @@ function mountWizard() {
     const { kind, value } = chip.dataset;
     if (kind === "place") return pickPlace(value);
     if (kind === "budget") state.filters.budget = value;
-    else if (kind === "scope") setScope(value);
+    else if (kind === "range") setRange(value);
+    else if (kind === "mode") state.filters.mode = value;
     else if (kind === "tag") state.filters.interests = toggled(state.filters.interests, value);
     else if (kind === "circ") state.filters.circumstances = toggled(state.filters.circumstances, value);
     updateStep();
@@ -889,6 +907,16 @@ function wireStep(s) {
     el.stepBody.querySelector("#w-geo").addEventListener("click", useMyLocation);
   }
   if (s.id === "time") {
+    const day = el.stepBody.querySelector("#w-date");
+    day.addEventListener("change", () => {
+      if (!isCalendarDate(day.value) || day.value < TODAY) { day.value = state.date; return; }
+      if (day.value === state.date) return;
+      state.date = day.value;
+      state.weather = null;
+      state.selectedId = null;
+      pickClock();
+      reloadEvents();
+    });
     const from = el.stepBody.querySelector("#w-from");
     const to = el.stepBody.querySelector("#w-to");
     from.addEventListener("change", () => {
@@ -920,9 +948,10 @@ function updateStep() {
       return;
     }
     const on = kind === "budget" ? f.budget === value
-      : kind === "scope" ? f.scope === value
-        : kind === "tag" ? f.interests.includes(value)
-          : f.circumstances.includes(value);
+      : kind === "range" ? f.range === value
+        : kind === "mode" ? f.mode === value
+          : kind === "tag" ? f.interests.includes(value)
+            : f.circumstances.includes(value);
     chip.setAttribute("aria-pressed", String(on));
     chip.classList.toggle("is-on", on);
     chip.querySelector(".chip-n").textContent = chipCount(kind, value, on);
@@ -946,10 +975,10 @@ function updateStep() {
   });
 }
 
-function setScope(id) {
-  state.filters.scope = id;
-  const s = SCOPES.find((x) => x.id === id);
-  if (s) state.filters.maxTravel = s.minutes;
+function setRange(id) {
+  state.filters.range = id;
+  const r = RANGES.find((x) => x.id === id);
+  if (r) state.filters.maxTravel = r.minutes;
 }
 
 /* Keep the axis wide enough to contain the window the user just chose. */
@@ -1013,6 +1042,7 @@ function saveAnswers() {
   try {
     localStorage.setItem(ANSWERS_KEY, JSON.stringify({
       filters: state.filters,
+      date: state.date,
       origin: state.origin,
       travelSource: state.travelSource,
       spanId: state.spanId,
@@ -1027,6 +1057,7 @@ function loadAnswers() {
     if (!j || !j.filters) return false;
     state.filters = { ...state.filters, ...j.filters };
     if (j.origin && Number.isFinite(j.origin.lat)) state.origin = j.origin;
+    if (!WANTED_DATE && isCalendarDate(j.date) && j.date >= TODAY) state.date = j.date;
     if (j.travelSource) state.travelSource = j.travelSource;
     if (j.spanId && SPANS[j.spanId]) state.spanId = j.spanId;
     return Boolean(j.answered);
@@ -1043,6 +1074,11 @@ function loadAnswers() {
    or choosing "use the clock" takes over from this. */
 
 function pickClock() {
+  if (!isToday()) {
+    state.clockFallback = false;
+    state.nowAuto = true;
+    return;
+  }
   const d = new Date();
   const real = d.getHours() + d.getMinutes() / 60;
   const f = state.filters;
@@ -1116,6 +1152,7 @@ function moveSuggestion(step) {
 
 function closeSuggestions() {
   clearTimeout(suggestTimer);
+  suggestSeq++;                 /* a reply still in flight is dropped */
   suggestions = [];
   suggestActive = -1;
   const list = el.stepBody.querySelector("#w-suggest");
@@ -1152,7 +1189,7 @@ async function reloadEvents() {
   const mine = ++feedRequest;
   state.feed = { ...state.feed, note: `Looking for what's on near ${state.origin.label}.` };
   render();
-  const { events, feed } = await loadEvents(state.origin);
+  const { events, feed } = await loadEvents(state.origin, state.date);
   if (mine !== feedRequest) return;
   state.events = events;
   state.feed = feed;
@@ -1228,7 +1265,7 @@ async function useMyLocation() {
   const mine = ++originPick;
   let settled = false;
   const watchdog = setTimeout(() => {
-    if (settled) return;
+    if (settled || mine !== originPick) return;
     settled = true;
     state.geo = { busy: false, note: "The browser never answered. Pick a spot below instead." };
     render();
@@ -1381,6 +1418,12 @@ function mountResults() {
       if (e) joinCircle(e);
       return;
     }
+    const close = ev.target.closest("[data-close-map]");
+    if (close) {
+      state.selectedId = null;
+      render();
+      return;
+    }
     /* Links inside a card go where they say; they do not select the card. */
     if (ev.target.closest("a")) return;
     const card = ev.target.closest(".card");
@@ -1446,7 +1489,7 @@ function mountRail() {
       </div>
       <label class="slider">
         <span class="slider-cap">Minutes</span>
-        <input type="range" id="travel" min="5" max="60" step="1">
+        <input type="range" id="travel" min="5" max="90" step="1">
       </label>
     </div>`;
 
@@ -1518,9 +1561,9 @@ function updateRail(items) {
   const realNow = new Date();
   const realHour = realNow.getHours() + realNow.getMinutes() / 60;
   rail.nowTime.textContent = state.nowAuto
-    ? `It's ${fmtClock(Math.round(now * 4) / 4)}`
+    ? (isToday() ? `It's ${fmtClock(now)}` : `Planning for ${fmtDate(state.date)}`)
     : state.clockFallback
-      ? `Pretending it's ${fmtClock(state.nowManual)}, since it's ${fmtClock(Math.round(realHour * 4) / 4)} now`
+      ? `Pretending it's ${fmtClock(state.nowManual)}, since it's ${fmtClock(realHour)} now`
       : `Pretending it's ${fmtClock(state.nowManual)}`;
   rail.nowReset.hidden = state.nowAuto;
   if (document.activeElement !== rail.nowRange) rail.nowRange.value = now;
@@ -1550,10 +1593,12 @@ function updateRail(items) {
 
   rail.list.innerHTML = [
     ["From", esc(state.origin.label), 0],
+    ["Day", isToday() ? "today" : fmtDate(state.date), 3],
     ["Into", intoLabels.length ? esc(intoLabels.join(", ")) : "anything", 1],
     ["Spend", esc(labelOf(BUDGETS, f.budget)), 2],
     ["Free", `${fmtClock(f.windowStart)} to ${fmtClock(f.windowEnd)}`, 3],
-    ["Range", esc(labelOf(SCOPES, f.scope)), 4],
+    ["Range", esc(labelOf(RANGES, f.range)), 4],
+    ["By", esc(labelOf(MODES, f.mode)), 4],
     ["Needs", needLabels.length ? esc(needLabels.join(", ")) : "nothing in particular", 5]
   ].map(([k, v, step]) => `<div class="answer">
       <dt>${k}</dt>
@@ -1596,7 +1641,7 @@ function renderCards(items) {
     : "Nothing fits yet";
   const w = weatherAt((state.filters.windowStart + state.filters.windowEnd) / 2);
   el.cardsSub.textContent = matches.length
-    ? `Ranked for ${fmtClock(Math.round(nowHour() * 4) / 4)} and a ${w?.rain ?? 0}% chance of rain. ` +
+    ? `Ranked for ${fmtClock(nowHour())} and a ${w?.rain ?? 0}% chance of rain. ` +
       "Everything here is still catchable."
     : "Loosen one answer, or move the clock, and they come back.";
 
@@ -1654,8 +1699,31 @@ function cardHTML(e, lead) {
         <div><dt>Back by</dt><dd><strong>${fmtClock(e.backBy)}</strong></dd></div>
       </dl>
       ${circleHTML(e)}
+      ${e.id === state.selectedId ? mapHTML(e) : ""}
     </div>
   </article>`;
+}
+
+/* A small map for the selected listing, and directions from where the
+   user starts by the way they said they get around. Both are plain links
+   into OpenStreetMap and Google Maps: no keys, nothing sent until clicked. */
+function mapHTML(e) {
+  if (e.lat == null || e.lng == null) return "";
+  const d = 0.008;
+  const bbox = [e.lng - d, e.lat - d * 0.6, e.lng + d, e.lat + d * 0.6].map((n) => n.toFixed(5)).join(",");
+  const embed = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${e.lat.toFixed(5)},${e.lng.toFixed(5)}`;
+  const osm = `https://www.openstreetmap.org/?mlat=${e.lat.toFixed(5)}&mlon=${e.lng.toFixed(5)}#map=16/${e.lat.toFixed(5)}/${e.lng.toFixed(5)}`;
+  const tm = { walk: "walking", bike: "bicycling", transit: "transit", train: "transit", drive: "driving" }[e.travelMode] || "transit";
+  const dirs = `https://www.google.com/maps/dir/?api=1&origin=${state.origin.lat.toFixed(5)},${state.origin.lng.toFixed(5)}` +
+    `&destination=${e.lat.toFixed(5)},${e.lng.toFixed(5)}&travelmode=${tm}`;
+  return `<div class="card-map">
+    <iframe src="${embed}" title="Map of ${esc(e.venue)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+    <div class="card-map-links">
+      <a class="link" href="${dirs}" target="_blank" rel="noreferrer">Directions ${modeWord(e.travelMode)}, from ${esc(state.origin.label)}</a>
+      <a class="link" href="${osm}" target="_blank" rel="noreferrer">Bigger map</a>
+      <button type="button" class="link" data-close-map>Close</button>
+    </div>
+  </div>`;
 }
 
 /* ---- hover text ------------------------------------------------------ */
@@ -1707,7 +1775,9 @@ function showTip(e, dot) {
   const viewH = window.innerHeight || document.documentElement.clientHeight || Infinity;
   const lastTop = viewH - wrap.top - h - 4;
   el.tip.style.left = `${clamp(x - w / 2, 4, Math.max(4, wrap.width - w - 4))}px`;
-  el.tip.style.top = `${above >= 0 ? above : Math.max(4 - wrap.top, Math.min(below, lastTop))}px`;
+  const minTop = 4 - wrap.top;
+  const top = above >= minTop ? above : Math.min(below, lastTop);
+  el.tip.style.top = `${Math.max(minTop, Math.min(top, lastTop))}px`;
 }
 
 /* On a phone the answers follow the chart. Moving the node, rather than
@@ -1719,8 +1789,10 @@ narrow.addEventListener("change", () => { if (state.status === "ready") render()
 function placeResultsPanel() {
   const side = document.querySelector(".side");
   const wantOutside = narrow.matches && state.screen === "results";
-  const outside = el.sideResults.parentElement === el.shell;
-  if (wantOutside && !outside) el.shell.appendChild(el.sideResults);
+  const outside = el.sideResults.parentElement !== side;
+  /* On a phone the count, the answers and the sliders go between the
+     chart and the list, not under a whole day of cards. */
+  if (wantOutside && !outside) document.querySelector(".cards-head").before(el.sideResults);
   else if (!wantOutside && outside) side.appendChild(el.sideResults);
 }
 
@@ -1735,7 +1807,8 @@ function defaultFilters() {
     windowEnd: 21,
     maxTravel: SEED_USER.maxTravelMinutes,
     budget: SEED_USER.budget,
-    scope: SEED_USER.scope,
+    range: SEED_USER.range,
+    mode: SEED_USER.mode,
     circumstances: [],
     interests: []
   };
@@ -1749,6 +1822,7 @@ function startOver() {
   state.geo = { busy: false, note: null };
   state.weather = null;
   state.forceRain = false;
+  state.date = TODAY;
   state.spanId = "evening";
   state.selectedId = null;
   state.hoverId = null;
@@ -1757,6 +1831,7 @@ function startOver() {
   state.step = 0;
   builtStep = -1;
   originPick++;
+  closeSuggestions();
   pickClock();
   syncHash(true);
   render();
@@ -1799,8 +1874,8 @@ function render() {
   el.standfirst.textContent = state.selectedId
     ? describeSelected(items)
     : matches.length === 1
-      ? "One thing you can get to, afford, and be back from."
-      : `${matches.length} things you can get to, afford, and be back from.`;
+      ? `One thing you can get to, afford, and be back from${isToday() ? "" : ` on ${fmtDate(state.date)}`}.`
+      : `${matches.length} things you can get to, afford, and be back from${isToday() ? "" : ` on ${fmtDate(state.date)}`}.`;
 
   [...el.spans.children].forEach((b) => {
     const on = b.dataset.span === state.spanId;
@@ -1808,7 +1883,9 @@ function render() {
     b.classList.toggle("is-on", on);
   });
 
-  el.empty.hidden = matches.length > 0;
+  /* The list's own heading already says "Nothing fits yet" when there are
+     listings that do not fit; this paragraph is for an empty day. */
+  el.empty.hidden = items.length > 0;
   el.svg.classList.toggle("is-live-drag", state.reflow === "live" && !revealing);
 
   ensureWeather();
@@ -1862,7 +1939,7 @@ if (window.location.hash === "#start") {
    about the place the user was last at. */
 const answered = loadAnswers();
 
-loadEvents(state.origin)
+loadEvents(state.origin, state.date)
   .then(({ events, feed }) => {
     state.events = events;
     state.feed = feed;
@@ -1903,3 +1980,12 @@ loadEvents(state.origin)
   });
 
 window.addEventListener("resize", renderTip);
+
+/* The clock keeps time while the page sits open: every half minute the
+   real clock is re-read, the fallback re-judged, and the ranking redone. */
+setInterval(() => {
+  if (state.status !== "ready" || state.screen !== "results") return;
+  if (!state.nowAuto && !state.clockFallback) return;   /* a scrubbed clock stays put */
+  pickClock();
+  render();
+}, 30000);

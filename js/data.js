@@ -4,7 +4,7 @@
    plain static server (Live Server, python -m http.server) the API is on
    port 3000 instead. When it cannot be reached, or has nothing on for
    today, the seed set below stands in and is labelled as a sample. */
-import { API_BASE } from "./api.js?v=16";
+import { API_BASE } from "./api.js?v=22";
 
 export const USE_API = true;
 export const API_URL = `${API_BASE}/api/events`;
@@ -20,8 +20,11 @@ const offsetOf = (d) => {
 const wanted = new URLSearchParams(window.location.search).get("date");
 /* The shape alone lets 2026-13-45 through, which stamps every seed with a
    NaN offset. A real date round-trips through Date and back unchanged. */
-const isCalendarDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && localDate(new Date(`${v}T12:00:00`)) === v;
-export const TODAY = isCalendarDate(wanted || "") ? wanted : localDate(new Date());
+export const isCalendarDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && localDate(new Date(`${v}T12:00:00`)) === v;
+export const TODAY = localDate(new Date());
+/* ?date=YYYY-MM-DD opens the page on another day; the day can also be
+   picked on the "When are you free?" question. */
+export const WANTED_DATE = isCalendarDate(wanted || "") ? wanted : null;
 const D = TODAY;
 const Z = offsetOf(new Date(`${D}T12:00:00`));
 const at = (t) => `${D}T${t}:00${Z}`;
@@ -90,10 +93,24 @@ export const BUDGETS = [
   { id: "any",      label: "no limit",   max: Infinity }
 ];
 
-export const SCOPES = [
-  { id: "campus", label: "on campus",        minutes: 15 },
-  { id: "kw",     label: "Waterloo and Kitchener", minutes: 30 },
-  { id: "any",    label: "anywhere nearby",  minutes: 60 }
+/* How far, as travel time from wherever the user starts, so the same
+   answer means the same thing in Waterloo, Toronto or Ottawa. */
+export const RANGES = [
+  { id: "r15", label: "within 15 minutes", minutes: 15 },
+  { id: "r30", label: "within 30 minutes", minutes: 30 },
+  { id: "r45", label: "within 45 minutes", minutes: 45 },
+  { id: "r60", label: "within an hour",    minutes: 60 },
+  { id: "r90", label: "within an hour and a half", minutes: 90 }
+];
+
+/* How they get around. "auto" keeps whatever the feed judged quickest. */
+export const MODES = [
+  { id: "auto",    label: "whatever's quickest" },
+  { id: "walk",    label: "walking" },
+  { id: "bike",    label: "cycling" },
+  { id: "transit", label: "bus" },
+  { id: "train",   label: "train" },
+  { id: "drive",   label: "car" }
 ];
 
 const RAW_EVENTS = [
@@ -1044,12 +1061,19 @@ const VENUE_COORDS = {
   "The Boathouse, Victoria Park": [43.4468, -80.4949],
 };
 
-/* The id carries the day, so the circle for today's movie night is not
-   shown on tomorrow's. Live listings already have per-day ids. */
-export const SEED_EVENTS = RAW_EVENTS.map((e) => {
-  const c = VENUE_COORDS[e.venue] || [null, null];
-  return { ...e, id: `${e.id}@${D}`, lat: c[0], lng: c[1] };
-});
+/* The sample listings for a given day: the same things, stamped for that
+   day, with the day in the id so the circle for one day's movie night is
+   not shown on another's. Live listings already have per-day ids. */
+export function seedFor(date) {
+  const z = offsetOf(new Date(`${date}T12:00:00`));
+  const onDay = (iso) => `${date}T${String(iso).slice(11, 19)}${z}`;
+  return RAW_EVENTS.map((e) => {
+    const c = VENUE_COORDS[e.venue] || [null, null];
+    return { ...e, id: `${e.id}@${date}`, startsAt: onDay(e.startsAt), endsAt: onDay(e.endsAt), lat: c[0], lng: c[1] };
+  });
+}
+
+export const SEED_EVENTS = seedFor(TODAY);
 
 
 /* Somewhere to start from when the browser will not share a location. */
@@ -1066,7 +1090,8 @@ export const SEED_USER = {
   origin: { lat: 43.4760, lng: -80.5397, label: "Phillip & Columbia" },
   maxTravelMinutes: 30,
   budget: "free",
-  scope: "kw",
+  range: "r30",
+  mode: "auto",
   freeWindows: [
     { startsAt: at("18:30"), endsAt: at("21:00") }
   ],
@@ -1074,7 +1099,7 @@ export const SEED_USER = {
   circumstances: []
 };
 
-const SAMPLE_FEED = (note) => ({ events: SEED_EVENTS, feed: { live: false, note } });
+const SAMPLE_FEED = (note, date = TODAY) => ({ events: seedFor(date), feed: { live: false, note } });
 
 /* The server already builds this shape; this only guards the fields the
    ranking reads unconditionally, so one odd listing cannot stop the page. */
@@ -1107,12 +1132,14 @@ const WATERLOO = { lat: 43.4760, lng: -80.5397 };
 const NEAR_WATERLOO_KM = 40;
 const FEED_RADIUS_KM = 60;
 
-export async function loadEvents(origin = SEED_USER.origin) {
-  if (!USE_API) return SAMPLE_FEED("Sample listings.");
+export async function loadEvents(origin = SEED_USER.origin, date = TODAY) {
+  const day = isCalendarDate(date) ? date : TODAY;
+  if (!USE_API) return SAMPLE_FEED("Sample listings.", day);
   const near = distanceKm(origin, WATERLOO) <= NEAR_WATERLOO_KM;
   const where = origin.label ? ` near ${origin.label}` : "";
+  const when = day === TODAY ? "today" : `on ${day}`;
   try {
-    const qs = `?date=${D}&lat=${origin.lat.toFixed(4)}&lng=${origin.lng.toFixed(4)}&radius=${FEED_RADIUS_KM}`;
+    const qs = `?date=${day}&lat=${origin.lat.toFixed(4)}&lng=${origin.lng.toFixed(4)}&radius=${FEED_RADIUS_KM}`;
     const r = await fetch(`${API_URL}${qs}`, { headers: { Accept: "application/json" } });
     if (!r.ok) throw new Error(`events ${r.status}`);
     const j = await r.json();
@@ -1121,7 +1148,7 @@ export async function loadEvents(origin = SEED_USER.origin) {
     const usable = live.filter((e) => e.travelMinutes <= 60).length;
 
     if (usable >= USABLE_FLOOR) {
-      return { events: live, feed: { live: true, note: `Live listings${where} today${from ? ` from ${from}` : ""}.` } };
+      return { events: live, feed: { live: true, note: `Live listings${where} ${when}${from ? ` from ${from}` : ""}.` } };
     }
     if (!near) {
       const n = live.length;
@@ -1131,28 +1158,28 @@ export async function loadEvents(origin = SEED_USER.origin) {
           live: n > 0,
           thin: true,
           note: n
-            ? `${n} live listing${n === 1 ? "" : "s"}${where} today${from ? ` from ${from}` : ""}.`
-            : `Nothing on the feed${where} today. Try a bigger city, or another day with ?date=.`
+            ? `${n} live listing${n === 1 ? "" : "s"}${where} ${when}${from ? ` from ${from}` : ""}.`
+            : `Nothing on the feed${where} ${when}. Try a bigger city, or another day.`
         }
       };
     }
     if (!live.length) {
-      return SAMPLE_FEED("The live feed has nothing on for today, so these are sample listings.");
+      return SAMPLE_FEED(`The live feed has nothing on for ${day === TODAY ? "today" : day}, so these are sample listings.`, day);
     }
     const ids = new Set(live.map((e) => String(e.id)));
-    const events = [...live, ...SEED_EVENTS.filter((e) => !ids.has(String(e.id)))];
+    const events = [...live, ...seedFor(day).filter((e) => !ids.has(String(e.id)))];
     const n = live.length;
     return {
       events,
       feed: {
         live: true,
         thin: true,
-        note: `${n} live listing${n === 1 ? "" : "s"} today${from ? ` from ${from}` : ""}, ` +
+        note: `${n} live listing${n === 1 ? "" : "s"} ${when}${from ? ` from ${from}` : ""}, ` +
           "shown alongside sample listings because the live feed is thin."
       }
     };
   } catch (err) {
-    return SAMPLE_FEED("The listings server is not running, so these are sample listings.");
+    return SAMPLE_FEED("The listings server is not running, so these are sample listings.", day);
   }
 }
 
@@ -1165,6 +1192,7 @@ const SPEEDS = {            /* km/h door to door, plus a fixed overhead */
   walk:    { kmh: 4.6, fixed: 1 },
   bike:    { kmh: 11,  fixed: 3 },
   transit: { kmh: 11,  fixed: 9 },
+  train:   { kmh: 40,  fixed: 18 },   /* getting to the station and waiting */
   drive:   { kmh: 18,  fixed: 4 }
 };
 
@@ -1178,10 +1206,11 @@ export function distanceKm(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-export function estimateTravel(origin, event) {
+export function estimateTravel(origin, event, wanted = "auto") {
   if (event.lat == null || event.lng == null) return null;
   const km = distanceKm(origin, { lat: event.lat, lng: event.lng });
-  const mode = SPEEDS[event.travelMode] ? event.travelMode : "transit";
+  const chosen = wanted && wanted !== "auto" && SPEEDS[wanted] ? wanted : null;
+  const mode = chosen || (SPEEDS[event.travelMode] ? event.travelMode : "transit");
   const { kmh, fixed } = SPEEDS[mode];
   return Math.max(1, Math.round(fixed + (km / kmh) * 60));
 }
@@ -1314,9 +1343,10 @@ export const SAMPLE_FORECAST = {
   )
 };
 
-export async function fetchForecast(origin) {
+export async function fetchForecast(origin, date = TODAY) {
+  const day = isCalendarDate(date) ? date : TODAY;
   const url = `${WEATHER_URL}?latitude=${origin.lat.toFixed(4)}&longitude=${origin.lng.toFixed(4)}` +
-    `&hourly=temperature_2m,precipitation_probability&timezone=America%2FToronto&forecast_days=2`;
+    `&hourly=temperature_2m,precipitation_probability&timezone=America%2FToronto&forecast_days=7`;
   const r = await fetch(url);
   if (!r.ok) throw new Error(`weather ${r.status}`);
   const j = await r.json();
@@ -1324,7 +1354,7 @@ export async function fetchForecast(origin) {
   const times = hourly.time || [];
   const hours = {};
   times.forEach((t, i) => {
-    if (!String(t).startsWith(D)) return;
+    if (!String(t).startsWith(day)) return;
     hours[Number(String(t).slice(11, 13))] = {
       temp: hourly.temperature_2m?.[i] ?? null,
       rain: hourly.precipitation_probability?.[i] ?? 0

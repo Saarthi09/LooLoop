@@ -186,7 +186,7 @@ function tagsFor(text, first) {
   return ordered.length ? ordered.slice(0, 3) : ["social"];
 }
 
-function circumstancesFor({ text, price, scope, studentPrice, travelMinutes = Infinity }) {
+function circumstancesFor({ text, price, scope, studentPrice, travelMinutes = Infinity, originInRegion = true }) {
   const list = [];
   if (price === 0) list.push("free");
   if (studentPrice) list.push("student-price");
@@ -203,7 +203,8 @@ function circumstancesFor({ text, price, scope, studentPrice, travelMinutes = In
   if (/wheelchair|accessible|barrier[- ]free/i.test(text)) list.push("step-free");
   /* Within the region, or within three quarters of an hour of wherever
      the user is: a Toronto listing is reachable from Toronto. */
-  if (scope !== "any" || travelMinutes <= 45) list.push("transit-reachable");
+  /* The region's own buses only help someone who is in the region. */
+  if ((scope !== "any" && originInRegion) || travelMinutes <= 45) list.push("transit-reachable");
   return list;
 }
 
@@ -259,6 +260,7 @@ export function normalizeTicketmaster(event, origin = ORIGIN) {
     event.images?.[0];
 
   const trip = travelFrom(origin, point);
+  const originInRegion = distanceKm(origin, UPTOWN) <= 16;
   return {
     id: String(event.id),
     title: event.name || "Untitled event",
@@ -274,7 +276,7 @@ export function normalizeTicketmaster(event, origin = ORIGIN) {
     scope,
     setting: OUTDOOR.test(`${event.name} ${venue.name}`) ? "outdoor" : "indoor",
     tags: tagsFor(text, TM_SEGMENTS[segment]),
-    circumstances: circumstancesFor({ text, price, scope, studentPrice: false, travelMinutes: trip.travelMinutes }),
+    circumstances: circumstancesFor({ text, price, scope, studentPrice: false, travelMinutes: trip.travelMinutes, originInRegion }),
     goingCount: 0,
     source: { name: "Ticketmaster", url: safeUrl(event.url) },
     imageUrl: safeUrl(image?.url),
@@ -302,6 +304,7 @@ export function normalizeWaterloo(event, origin = ORIGIN) {
   if (hoursBetween(startsAt, endsAt) >= 20) return null;
 
   const trip = travelFrom(origin, point);
+  const originInRegion = distanceKm(origin, UPTOWN) <= 16;
   return {
     id: `uw-${event.uniqueKey || event.siteId}-${event.eventStartDate}`,
     title: event.title || "Untitled event",
@@ -317,7 +320,7 @@ export function normalizeWaterloo(event, origin = ORIGIN) {
     scope,
     setting: OUTDOOR.test(`${event.title} ${event.locationName || ""}`) ? "outdoor" : "indoor",
     tags: tagsFor(text),
-    circumstances: circumstancesFor({ text, price, scope, studentPrice, travelMinutes: trip.travelMinutes }),
+    circumstances: circumstancesFor({ text, price, scope, studentPrice, travelMinutes: trip.travelMinutes, originInRegion }),
     goingCount: 0,
     source: { name: "Waterloo Events", url: safeUrl(event.eventWebsite) || safeUrl(event.itemUri) },
     imageUrl: null,
@@ -373,6 +376,7 @@ export function normalizeWusa(event, origin = ORIGIN) {
   const { price, studentPrice } = priceFromText(`${event.summary} ${event.description}`);
 
   const trip = travelFrom(origin, point);
+  const originInRegion = distanceKm(origin, UPTOWN) <= 16;
   return {
     id: `wusa-${event.uid || event.url}-${event.startsAt}`,
     title: event.summary || "Untitled event",
@@ -388,7 +392,7 @@ export function normalizeWusa(event, origin = ORIGIN) {
     scope,
     setting: OUTDOOR.test(`${event.summary} ${event.location || ""}`) ? "outdoor" : "indoor",
     tags: tagsFor(text),
-    circumstances: circumstancesFor({ text, price, scope, studentPrice, travelMinutes: trip.travelMinutes }),
+    circumstances: circumstancesFor({ text, price, scope, studentPrice, travelMinutes: trip.travelMinutes, originInRegion }),
     goingCount: 0,
     source: { name: "WUSA", url: safeUrl(event.url) },
     imageUrl: null,
