@@ -18,14 +18,15 @@ function formatDate(event) {
       }).format(new Date(value))
     : "Date TBA";
 }
-function render(events) {
+function render(items) {
   results.replaceChildren();
-  if (!events.length) {
+  if (!items.length) {
     results.innerHTML =
       '<p class="empty">No events found. Try a broader interest.</p>';
     return;
   }
-  events.forEach((event) => {
+  items.forEach((item) => {
+    const event = item.event || item;
     const card = template.content.cloneNode(true);
     const image =
       event.images?.find((item) => item.ratio === "16_9") || event.images?.[0];
@@ -39,9 +40,47 @@ function render(events) {
       [venue?.name, venue?.city?.name].filter(Boolean).join(" · ") ||
       "Location TBA";
     card.querySelector(".source").textContent = event.source || "Ticketmaster";
+    const matchBadge = card.querySelector(".match-badge");
+    const reasons = card.querySelector(".match-reasons");
+    if (item.matchScore != null) {
+      matchBadge.hidden = false;
+      matchBadge.textContent = `${item.matchScore}% match`;
+      item.reasons.forEach((reason) => {
+        const listItem = document.createElement("li");
+        listItem.textContent = reason;
+        reasons.append(listItem);
+      });
+    }
     card.querySelector("a").href = event.url || "#";
     results.append(card);
   });
+}
+
+async function loadRecommendations(preferences) {
+  results.innerHTML =
+    '<p class="empty">Building your personalized newcomer guide…</p>';
+  status.textContent = "Analyzing your preferences…";
+
+  try {
+    const response = await fetch(`${apiBase}/api/recommend`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(preferences),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not build recommendations.");
+    }
+
+    render(payload.recommendations);
+    title.textContent = "Your newcomer picks";
+    status.textContent = `${payload.recommendations.length} personalized events`;
+    document.querySelector("#recommendation-summary").textContent =
+      payload.summary;
+  } catch (error) {
+    results.innerHTML = `<p class="empty error">${error.message}</p>`;
+    status.textContent = "Recommendations unavailable";
+  }
 }
 async function search() {
   const data = new FormData(form);
@@ -99,3 +138,20 @@ document.querySelectorAll("[data-interest]").forEach((button) =>
     search();
   }),
 );
+
+const savedPreferences = JSON.parse(
+  localStorage.getItem("looloop-preferences") || "null",
+);
+if (
+  savedPreferences &&
+  new URLSearchParams(window.location.search).has("recommended")
+) {
+  document.querySelector("#city").value = savedPreferences.city;
+  document.querySelector("#keyword").value =
+    savedPreferences.interests.join(", ");
+  loadRecommendations(savedPreferences);
+} else {
+  status.textContent = "Search to see upcoming events.";
+  results.innerHTML =
+    '<p class="empty">Choose an interest and city to start exploring.</p>';
+}

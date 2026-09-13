@@ -32,6 +32,27 @@ nav a {
   color: var(--ink);
   text-decoration: none;
 }
+.circles-link {
+  font:
+    800 14px Manrope,
+    sans-serif;
+  color: var(--ink);
+  text-decoration: none;
+}
+.nav-actions {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+}
+.skip-button {
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font:
+    800 14px Manrope,
+    sans-serif;
+  cursor: pointer;
+}
 nav span,
 .eyebrow,
 .date {
@@ -168,6 +189,33 @@ article img {
 article div {
   padding: 16px;
 }
+.event-image-wrap {
+  position: relative;
+  padding: 0;
+}
+.match-badge {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: var(--orange);
+  color: white;
+  font:
+    700 11px "DM Mono",
+    monospace;
+}
+.match-reasons {
+  min-height: 44px;
+  margin: 0 0 14px;
+  padding-left: 18px;
+  color: #615a6d;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.match-reasons:empty {
+  display: none;
+}
 h3 {
   font-size: 18px;
   min-height: 52px;
@@ -205,6 +253,136 @@ article a {
 .error {
   color: #a32b21;
 }
+.circles-hero {
+  max-width: 680px;
+  padding: 60px 0 36px;
+}
+.circles-hero > p:not(.eyebrow) {
+  color: #665f70;
+  font-size: 18px;
+  line-height: 1.6;
+}
+.circles-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+.circle-card {
+  padding: 20px;
+}
+.circle-card h3 {
+  min-height: 55px;
+}
+.circle-tags {
+  color: var(--orange);
+  font:
+    700 11px "DM Mono",
+    monospace;
+  text-transform: uppercase;
+}
+.circle-members {
+  color: #756f7d;
+  font-size: 13px;
+}
+.onboarding-hero {
+  display: grid;
+  grid-template-columns: 1.5fr 0.8fr;
+  gap: 48px;
+  align-items: end;
+  padding: 62px 0 48px;
+}
+.onboarding-hero > p {
+  color: #665f70;
+  font-size: 17px;
+  line-height: 1.65;
+}
+.questionnaire {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.question-card {
+  display: grid;
+  grid-template-columns: 45px 1fr;
+  gap: 10px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: white;
+}
+.question-card > div {
+  min-width: 0;
+}
+.question-number {
+  color: var(--orange);
+  font:
+    700 12px "DM Mono",
+    monospace;
+}
+.question-card label {
+  display: block;
+  padding: 0;
+  border: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 800;
+}
+.question-card input,
+.question-card select {
+  width: 100%;
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--cream);
+  color: var(--ink);
+  font:
+    600 14px Manrope,
+    sans-serif;
+}
+.location-option {
+  margin-top: 12px;
+}
+.location-option button {
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  background: var(--ink);
+  color: white;
+  padding: 10px 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.location-option span {
+  display: block;
+  margin-top: 8px;
+  color: #756f7d;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.question-wide,
+.questionnaire-actions {
+  grid-column: 1 / -1;
+}
+.questionnaire-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 0;
+}
+.questionnaire-actions p {
+  color: #756f7d;
+  font-size: 13px;
+}
+.questionnaire-actions button {
+  min-height: 50px;
+  padding: 0 24px;
+}
+.results-hero {
+  padding-top: 55px;
+}
 @media (max-width: 700px) {
   main {
     padding: 0 18px 40px;
@@ -216,8 +394,22 @@ article a {
     padding: 45px 0;
   }
   form,
-  .grid {
+  .grid,
+  .circles-grid,
+  .onboarding-hero,
+  .questionnaire {
     grid-template-columns: 1fr;
+  }
+  .question-wide,
+  .questionnaire-actions {
+    grid-column: auto;
+  }
+  .questionnaire-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .nav-actions {
+    gap: 10px;
   }
   label {
     border-right: 0;
