@@ -18,7 +18,18 @@
 
   <main class="frame">
     <section class="stage">
-      <svg class="radial" id="radial" role="group" aria-label="Tonight, arranged by start time and travel time"></svg>
+      <div class="toolbar">
+        <div class="switch" id="views" role="group" aria-label="View"></div>
+        <div class="switch" id="spans" role="group" aria-label="Hours shown"></div>
+      </div>
+
+      <div class="canvas-wrap" id="canvas-wrap">
+        <svg class="radial" id="radial" role="group" aria-label="Tonight, arranged by start time and travel time"></svg>
+        <div class="tip" id="tip" aria-hidden="true" hidden></div>
+      </div>
+
+      <div class="list" id="list" hidden></div>
+
       <p class="empty" id="empty" hidden>Nothing fits that window. Try widening the time or the travel distance.</p>
       <p class="legend" id="legend"></p>
     </section>

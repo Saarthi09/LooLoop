@@ -5,7 +5,7 @@ const D = "2026-09-13";
 const Z = "-04:00";
 const at = (t) => `${D}T${t}:00${Z}`;
 
-export const SEED_EVENTS = [
+const RAW_EVENTS = [
   {
     id: "evt_001",
     title: "Board game night, they pair you up",
@@ -565,11 +565,361 @@ export const SEED_EVENTS = [
     source: { name: "Meetup", url: "https://meetup.com/toronto-late-runners" },
     imageUrl: null,
     description: "Steady six minute kilometres along the water, back at the same spot."
+  },
+  {
+    id: "evt_041",
+    title: "Sunrise swim, lanes are quiet before seven",
+    venue: "Sunnyside Gus Ryder Pool",
+    startsAt: at("06:30"), endsAt: at("07:45"),
+    travelMinutes: 35, travelMode: "transit",
+    price: 0, currency: "CAD",
+    tags: ["fitness", "outdoors"],
+    circumstances: ["free", "solo-friendly", "no-alcohol", "step-free"],
+    goingCount: 6, matchScore: 0.31,
+    source: { name: "Venue site", url: "https://toronto.ca/sunnyside-pool" },
+    imageUrl: null,
+    description: "Two lanes roped off for steady swimmers, two for anyone else."
+  },
+  {
+    id: "evt_042",
+    title: "Learn to row, boats and coach provided",
+    venue: "Harbourfront Canoe and Kayak Centre",
+    startsAt: at("07:00"), endsAt: at("09:00"),
+    travelMinutes: 17, travelMode: "transit",
+    price: 35, currency: "CAD",
+    tags: ["outdoors", "fitness"],
+    circumstances: ["beginner-welcome", "no-alcohol", "solo-friendly"],
+    goingCount: 9, matchScore: 0.34,
+    source: { name: "Venue site", url: "https://paddletoronto.com" },
+    imageUrl: null,
+    description: "Flat water before the ferries start. They put singles in doubles."
+  },
+  {
+    id: "evt_043",
+    title: "Sunday long run, 12k at a talking pace",
+    venue: "Sunnyside Boardwalk",
+    startsAt: at("07:30"), endsAt: at("09:00"),
+    travelMinutes: 36, travelMode: "transit",
+    price: 0, currency: "CAD",
+    tags: ["outdoors", "fitness"],
+    circumstances: ["free", "solo-friendly", "beginner-welcome"],
+    goingCount: 27, matchScore: 0.42,
+    source: { name: "Instagram", url: "https://instagram.com/westendrunners" },
+    imageUrl: null,
+    description: "Out and back along the lake. Water at the halfway point."
+  },
+  {
+    id: "evt_044",
+    title: "Coffee and code, bring whatever you're stuck on",
+    venue: "Balzac's Distillery District",
+    startsAt: at("08:00"), endsAt: at("11:00"),
+    travelMinutes: 25, travelMode: "transit",
+    price: 0, currency: "CAD",
+    tags: ["making", "social"],
+    circumstances: ["free", "solo-friendly", "quiet", "no-alcohol", "step-free"],
+    goingCount: 14, matchScore: 0.46,
+    source: { name: "Meetup", url: "https://meetup.com/toronto-coffee-and-code" },
+    imageUrl: null,
+    description: "Nobody presents anything. People sit, work, and ask for help out loud."
+  },
+  {
+    id: "evt_045",
+    title: "Yoga on the grass, pay what you can",
+    venue: "Grange Park",
+    startsAt: at("08:30"), endsAt: at("09:30"),
+    travelMinutes: 7, travelMode: "walk",
+    price: 0, currency: "CAD",
+    tags: ["fitness", "outdoors"],
+    circumstances: ["free", "beginner-welcome", "solo-friendly", "no-alcohol", "quiet"],
+    goingCount: 31, matchScore: 0.55,
+    source: { name: "Instagram", url: "https://instagram.com/grangeparkyoga" },
+    imageUrl: null,
+    description: "Spare mats by the tree. Cancelled if it rains, they post by eight."
+  },
+  {
+    id: "evt_046",
+    title: "Farmers market, stalls until the bread runs out",
+    venue: "Wychwood Barns",
+    startsAt: at("09:00"), endsAt: at("13:00"),
+    travelMinutes: 31, travelMode: "transit",
+    price: 0, currency: "CAD",
+    tags: ["food", "social", "outdoors"],
+    circumstances: ["free", "kid-friendly", "step-free", "solo-friendly"],
+    goingCount: 88, matchScore: 0.5,
+    source: { name: "Venue site", url: "https://thestop.org/farmers-market" },
+    imageUrl: null,
+    description: "Thirty growers under the shed roof. Cash is faster than the card readers."
+  },
+  {
+    id: "evt_047",
+    title: "Beginner tennis, rackets to borrow",
+    venue: "Ramsden Park",
+    startsAt: at("09:30"), endsAt: at("11:00"),
+    travelMinutes: 26, travelMode: "transit",
+    price: 0, currency: "CAD",
+    tags: ["fitness", "outdoors"],
+    circumstances: ["free", "beginner-welcome", "solo-friendly", "no-alcohol"],
+    goingCount: 12, matchScore: 0.44,
+    source: { name: "Meetup", url: "https://meetup.com/toronto-beginner-tennis" },
+    imageUrl: null,
+    description: "Four public courts, first come. Someone always has a spare racket."
+  },
+  {
+    id: "evt_048",
+    title: "Sketch crawl, one gallery then the street",
+    venue: "Art Gallery of Ontario",
+    startsAt: at("10:00"), endsAt: at("13:00"),
+    travelMinutes: 9, travelMode: "walk",
+    price: 0, currency: "CAD",
+    tags: ["art", "social"],
+    circumstances: ["free", "beginner-welcome", "solo-friendly", "quiet", "step-free"],
+    goingCount: 18, matchScore: 0.61,
+    source: { name: "Instagram", url: "https://instagram.com/tosketchcrawl" },
+    imageUrl: null,
+    description: "Free on Sunday mornings. Bring a pad, they have spare pencils."
+  },
+  {
+    id: "evt_049",
+    title: "Bike repair clinic, fix it yourself with help",
+    venue: "Bike Sauce",
+    startsAt: at("10:30"), endsAt: at("14:00"),
+    travelMinutes: 27, travelMode: "bike",
+    price: 0, currency: "CAD",
+    tags: ["making", "outdoors"],
+    circumstances: ["free", "beginner-welcome", "solo-friendly", "no-alcohol"],
+    goingCount: 21, matchScore: 0.48,
+    source: { name: "Venue site", url: "https://bikesauce.org" },
+    imageUrl: null,
+    description: "Stands, tools and a volunteer who will show you rather than do it."
+  },
+  {
+    id: "evt_050",
+    title: "Storytime and singing, under fives",
+    venue: "Lillian H. Smith Library",
+    startsAt: at("11:00"), endsAt: at("11:45"),
+    travelMinutes: 15, travelMode: "walk",
+    price: 0, currency: "CAD",
+    tags: ["books", "social"],
+    circumstances: ["free", "kid-friendly", "step-free", "no-alcohol", "quiet"],
+    goingCount: 24, matchScore: 0.3,
+    source: { name: "Venue site", url: "https://torontopubliclibrary.ca" },
+    imageUrl: null,
+    description: "Twenty minutes of books, then songs. Buggy parking inside the door."
+  },
+  {
+    id: "evt_051",
+    title: "Dim sum crawl, four rooms on Spadina",
+    venue: "Chinatown, Spadina Avenue",
+    startsAt: at("11:30"), endsAt: at("14:00"),
+    travelMinutes: 7, travelMode: "walk",
+    price: 30, currency: "CAD",
+    tags: ["food", "social"],
+    circumstances: ["solo-friendly", "step-free", "beginner-welcome"],
+    goingCount: 16, matchScore: 0.57,
+    source: { name: "Meetup", url: "https://meetup.com/toronto-dim-sum" },
+    imageUrl: null,
+    description: "Everyone throws in thirty dollars and the organiser orders."
+  },
+  {
+    id: "evt_052",
+    title: "Pickup basketball, full court",
+    venue: "Dufferin Grove Park",
+    startsAt: at("12:00"), endsAt: at("15:00"),
+    travelMinutes: 26, travelMode: "transit",
+    price: 0, currency: "CAD",
+    tags: ["fitness", "outdoors"],
+    circumstances: ["free", "solo-friendly"],
+    goingCount: 19, matchScore: 0.41,
+    source: { name: "Facebook", url: "https://facebook.com/groups/dufferingrovehoops" },
+    imageUrl: null,
+    description: "Winners hold the court. Call your own fouls."
+  },
+  {
+    id: "evt_053",
+    title: "Shoreline cleanup, gloves and bags given out",
+    venue: "Tommy Thompson Park",
+    startsAt: at("12:30"), endsAt: at("15:30"),
+    travelMinutes: 35, travelMode: "bike",
+    price: 0, currency: "CAD",
+    tags: ["outdoors", "social"],
+    circumstances: ["free", "solo-friendly", "kid-friendly", "no-alcohol"],
+    goingCount: 42, matchScore: 0.39,
+    source: { name: "Eventbrite", url: "https://eventbrite.ca/e/leslie-spit-cleanup" },
+    imageUrl: null,
+    description: "Meet at the gate. Long walk in, so wear something you can move in."
+  },
+  {
+    id: "evt_054",
+    title: "Free gallery tour, forty minutes",
+    venue: "Museum of Contemporary Art",
+    startsAt: at("13:00"), endsAt: at("13:45"),
+    travelMinutes: 28, travelMode: "transit",
+    price: 0, currency: "CAD",
+    tags: ["art"],
+    circumstances: ["free", "step-free", "quiet", "solo-friendly", "beginner-welcome"],
+    goingCount: 11, matchScore: 0.52,
+    source: { name: "Venue site", url: "https://moca.ca" },
+    imageUrl: null,
+    description: "Volunteer guide takes one floor. No booking, just turn up at the desk."
+  },
+  {
+    id: "evt_055",
+    title: "Roast and board games, long table at the back",
+    venue: "The Wren, Danforth",
+    startsAt: at("13:30"), endsAt: at("17:00"),
+    travelMinutes: 50, travelMode: "transit",
+    price: 0, currency: "CAD",
+    tags: ["games", "food", "social"],
+    circumstances: ["solo-friendly", "step-free"],
+    goingCount: 23, matchScore: 0.47,
+    source: { name: "Instagram", url: "https://instagram.com/thewrento" },
+    imageUrl: null,
+    description: "Shelf of games by the window. You buy food if you want it, nobody checks."
+  },
+  {
+    id: "evt_056",
+    title: "Clay drop in, one pot on the wheel",
+    venue: "Gardiner Museum",
+    startsAt: at("14:00"), endsAt: at("16:00"),
+    travelMinutes: 21, travelMode: "transit",
+    price: 40, currency: "CAD",
+    tags: ["art", "making"],
+    circumstances: ["beginner-welcome", "step-free", "no-alcohol", "solo-friendly"],
+    goingCount: 15, matchScore: 0.43,
+    source: { name: "Venue site", url: "https://gardinermuseum.on.ca" },
+    imageUrl: null,
+    description: "Twelve wheels, two instructors. They fire it and you collect it later."
+  },
+  {
+    id: "evt_057",
+    title: "Clothing swap, bring five take five",
+    venue: "The Great Hall, Queen West",
+    startsAt: at("14:30"), endsAt: at("17:30"),
+    travelMinutes: 16, travelMode: "walk",
+    price: 0, currency: "CAD",
+    tags: ["making", "social"],
+    circumstances: ["free", "solo-friendly", "step-free", "no-alcohol"],
+    goingCount: 64, matchScore: 0.53,
+    source: { name: "Eventbrite", url: "https://eventbrite.ca/e/west-end-clothing-swap" },
+    imageUrl: null,
+    description: "Sorted by size on long rails. Whatever is left goes to a shelter."
+  },
+  {
+    id: "evt_058",
+    title: "Matinee, a print of something from 1974",
+    venue: "Paradise Theatre, Bloor",
+    startsAt: at("15:00"), endsAt: at("17:15"),
+    travelMinutes: 25, travelMode: "transit",
+    price: 13, currency: "CAD",
+    tags: ["film"],
+    circumstances: ["solo-friendly", "step-free", "quiet"],
+    goingCount: 37, matchScore: 0.49,
+    source: { name: "Venue site", url: "https://paradiseonbloor.com" },
+    imageUrl: null,
+    description: "Introduced by whoever programmed it, which takes about five minutes."
+  },
+  {
+    id: "evt_059",
+    title: "Kite flying, spares if the wind takes yours",
+    venue: "Woodbine Beach",
+    startsAt: at("15:30"), endsAt: at("18:00"),
+    travelMinutes: 49, travelMode: "transit",
+    price: 0, currency: "CAD",
+    tags: ["outdoors", "social"],
+    circumstances: ["free", "kid-friendly", "solo-friendly", "no-alcohol"],
+    goingCount: 26, matchScore: 0.36,
+    source: { name: "Facebook", url: "https://facebook.com/groups/torontokites" },
+    imageUrl: null,
+    description: "East end of the sand where the wind comes straight off the water."
+  },
+  {
+    id: "evt_060",
+    title: "Midnight ride, lights on, slow pace",
+    venue: "Nathan Phillips Square",
+    startsAt: at("23:30"), endsAt: at("23:59"),
+    travelMinutes: 9, travelMode: "bike",
+    price: 0, currency: "CAD",
+    tags: ["outdoors", "social", "fitness"],
+    circumstances: ["free", "solo-friendly", "beginner-welcome"],
+    goingCount: 33, matchScore: 0.45,
+    source: { name: "Instagram", url: "https://instagram.com/tomidnightride" },
+    imageUrl: null,
+    description: "Meet under the arches. Twenty easy kilometres through empty streets."
   }
 ];
 
+/* Venue coordinates, so travel time can be recomputed when the user moves.
+   The API is expected to carry lat and lng on every event; the seed set
+   attaches them from this table. */
+const VENUE_COORDS = {
+  "Snakes & Lattes Annex": [43.6644, -79.4106],
+  "Bellevue Square Park": [43.6540, -79.4022],
+  "The Cameron House": [43.6486, -79.3976],
+  "Artscape Youngplace": [43.6472, -79.4216],
+  "Trinity Bellwoods Park": [43.6474, -79.4133],
+  "The Rex Hotel": [43.6503, -79.3888],
+  "Glad Day Bookshop": [43.6659, -79.3806],
+  "Christie Pits Park": [43.6644, -79.4204],
+  "Basecamp Climbing Bathurst": [43.6647, -79.4113],
+  "Sneaky Dee's": [43.6570, -79.4045],
+  "Dovercourt House": [43.6620, -79.4288],
+  "Evergreen Brick Works": [43.6846, -79.3653],
+  "SPIN Toronto": [43.6449, -79.3955],
+  "Lula Lounge": [43.6497, -79.4358],
+  "Cherry Beach Paddle Club": [43.6377, -79.3446],
+  "Ryu Kitchen Studio, Bloor West": [43.6519, -79.4749],
+  "The Horseshoe Tavern": [43.6487, -79.3950],
+  "Stanley Park South": [43.6437, -79.4058],
+  "Wychwood Barns": [43.6801, -79.4222],
+  "The Only Cafe, Danforth": [43.6810, -79.3375],
+  "Riverdale Park East": [43.6690, -79.3556],
+  "Open Studio, Distillery District": [43.6503, -79.3592],
+  "High Park, Hillside Gardens": [43.6465, -79.4637],
+  "Steps Dance Studio, Ossington": [43.6520, -79.4200],
+  "Burdock Music Hall": [43.6602, -79.4383],
+  "Othership Adelaide": [43.6472, -79.3930],
+  "Alexandra Park Community Garden": [43.6503, -79.4014],
+  "401 Games, Yonge Street": [43.6620, -79.3844],
+  "Ashbridges Bay": [43.6620, -79.3110],
+  "Church of the Holy Trinity": [43.6544, -79.3830],
+  "Vanderhoof Skate Park": [43.7100, -79.3480],
+  "Revue Cinema, Roncesvalles": [43.6497, -79.4497],
+  "Hot Docs Ted Rogers Cinema cafe": [43.6650, -79.4110],
+  "Bad Dog Theatre, Bloor": [43.6659, -79.4159],
+  "Sweet Pete's, Bloor and Bathurst": [43.6647, -79.4113],
+  "Clay Design Studio, Parkdale": [43.6398, -79.4372],
+  "Pauper's Pub, Bloor": [43.6653, -79.4123],
+  "Scadding Court Community Centre": [43.6524, -79.4028],
+  "Stackt Market, Bathurst": [43.6432, -79.4033],
+  "HTO Park": [43.6380, -79.3880],
+  "Sunnyside Gus Ryder Pool": [43.6383, -79.4525],
+  "Harbourfront Canoe and Kayak Centre": [43.6383, -79.3866],
+  "Sunnyside Boardwalk": [43.6377, -79.4560],
+  "Balzac's Distillery District": [43.6503, -79.3596],
+  "Grange Park": [43.6520, -79.3925],
+  "Ramsden Park": [43.6760, -79.3900],
+  "Art Gallery of Ontario": [43.6536, -79.3925],
+  "Bike Sauce": [43.6612, -79.3452],
+  "Lillian H. Smith Library": [43.6580, -79.3982],
+  "Chinatown, Spadina Avenue": [43.6529, -79.3980],
+  "Dufferin Grove Park": [43.6570, -79.4318],
+  "Tommy Thompson Park": [43.6260, -79.3300],
+  "Museum of Contemporary Art": [43.6540, -79.4390],
+  "The Wren, Danforth": [43.6870, -79.3180],
+  "Gardiner Museum": [43.6677, -79.3936],
+  "The Great Hall, Queen West": [43.6470, -79.4100],
+  "Paradise Theatre, Bloor": [43.6633, -79.4260],
+  "Woodbine Beach": [43.6630, -79.3080],
+  "Nathan Phillips Square": [43.6525, -79.3839]
+};
+
+export const SEED_EVENTS = RAW_EVENTS.map((e) => {
+  const c = VENUE_COORDS[e.venue] || [null, null];
+  return { ...e, lat: c[0], lng: c[1] };
+});
+
 export const SEED_USER = {
-  origin: { lat: 43.6532, lng: -79.3832, label: "Queen & Spadina" },
+  origin: { lat: 43.6487, lng: -79.3959, label: "Queen & Spadina" },
   maxTravelMinutes: 45,
   freeWindows: [
     { startsAt: at("18:30"), endsAt: at("21:00") }
@@ -583,4 +933,66 @@ export async function loadEvents() {
   const r = await fetch(API_URL);
   if (!r.ok) throw new Error(`events ${r.status}`);
   return r.json();
+}
+
+/* ---- travel model ----------------------------------------------------
+   Straight-line distance with a per-mode speed. It is an estimate, not a
+   routing engine, and it is only used once the user moves off the default
+   origin. The feed's own travelMinutes wins until then. */
+
+const SPEEDS = {            /* km/h door to door, plus a fixed overhead */
+  walk:    { kmh: 4.6, fixed: 1 },
+  bike:    { kmh: 11,  fixed: 3 },
+  transit: { kmh: 11,  fixed: 9 },
+  drive:   { kmh: 18,  fixed: 4 }
+};
+
+export function distanceKm(a, b) {
+  const R = 6371;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+export function estimateTravel(origin, event) {
+  if (event.lat == null || event.lng == null) return null;
+  const km = distanceKm(origin, { lat: event.lat, lng: event.lng });
+  const mode = SPEEDS[event.travelMode] ? event.travelMode : "transit";
+  const { kmh, fixed } = SPEEDS[mode];
+  return Math.max(1, Math.round(fixed + (km / kmh) * 60));
+}
+
+/* ---- geocoding -------------------------------------------------------
+   OpenStreetMap's Nominatim. Google's Geocoding API needs a billed key,
+   so it is not an option for a key-free build. Only ever called with a
+   place name the user typed. */
+
+export const GEOCODE_URL = "https://nominatim.openstreetmap.org/search";
+
+export async function geocode(query) {
+  const url = `${GEOCODE_URL}?format=json&addressdetails=1&limit=1` +
+    `&countrycodes=ca&q=${encodeURIComponent(query)}`;
+  const r = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!r.ok) throw new Error(`geocoder ${r.status}`);
+  const hits = await r.json();
+  if (!hits.length) throw new Error("no match");
+  const hit = hits[0];
+  return { lat: Number(hit.lat), lng: Number(hit.lon), label: placeLabel(hit) };
+}
+
+/* display_name is a full postal address and far too long for a label. */
+function placeLabel(hit) {
+  const a = hit.address || {};
+  const street = [a.house_number, a.road].filter(Boolean).join(" ");
+  const area = a.neighbourhood || a.suburb || a.city_district ||
+    a.town || a.city || a.village || a.county || "";
+  const name = (hit.name || "").trim();
+  /* A long POI name is worse than the street it sits on. */
+  const primary = (!name || (street && name.length > 28)) ? (street || name) : name;
+  const label = [...new Set([primary, area].filter(Boolean))].join(", ") ||
+    String(hit.display_name).split(",")[0].trim();
+  return label.length > 38 ? `${label.slice(0, 37).trimEnd()}\u2026` : label;
 }

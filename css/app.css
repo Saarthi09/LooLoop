@@ -120,6 +120,14 @@ body {
   cursor: default;
 }
 
+/* Outside the hours the axis is showing. Not a filter, so no dimmed
+   survivor: the dot is simply not on this chart. */
+.dot.is-off {
+  fill: var(--ink-3);
+  opacity: 0;
+  pointer-events: none;
+}
+
 .dot.is-match:hover, .dot.is-late:hover {
   stroke: var(--ink);
   stroke-width: 1.5;
@@ -156,6 +164,238 @@ body {
   max-width: 46ch;
   color: var(--ink);
 }
+
+
+/* ---- toolbar --------------------------------------------------------- */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin: 0 0 10px 26px;
+}
+
+.switch {
+  display: inline-flex;
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+
+.seg {
+  padding: 4px 11px;
+  border: 0;
+  border-left: 1px solid var(--hair-2);
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.seg:first-child { border-left: 0; }
+
+.seg:hover { color: var(--ink); }
+
+.seg.is-on {
+  background: var(--signal);
+  border-left-color: var(--signal);
+  color: var(--paper);
+}
+
+.seg:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: -2px;
+}
+
+/* ---- hover text ------------------------------------------------------ */
+
+.canvas-wrap { position: relative; }
+
+.tip {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  gap: 2px;
+  width: max-content;
+  max-width: 240px;
+  padding: 7px 9px;
+  border: 1px solid var(--ink);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  pointer-events: none;
+}
+
+/* A class rule beats the UA's [hidden], so restate it. */
+.tip[hidden] { display: none; }
+
+.tip-title { font-weight: 500; font-size: 14px; }
+
+.tip-venue {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.tip-grid {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 1px 10px;
+  margin-top: 5px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tip-k { color: var(--ink-2); }
+
+.tip-why {
+  margin-top: 5px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.tip-why:first-letter { text-transform: uppercase; }
+
+/* ---- list view ------------------------------------------------------- */
+
+.list { margin-left: 26px; }
+
+.list-head {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) 96px 56px 86px;
+  gap: 14px;
+  padding: 0 2px 5px 2px;
+  border-bottom: 1px solid var(--ink-3);
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.list-head span:nth-child(4) { text-align: right; }
+
+.row {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) 96px 56px 86px;
+  gap: 14px;
+  align-items: baseline;
+  width: 100%;
+  padding: 8px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--hair);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row:hover { background: var(--paper-2); }
+
+.row:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: -2px;
+}
+
+.row.is-out { color: var(--ink-2); }
+
+.row.is-sel { background: var(--paper-2); }
+
+.row-time,
+.row-travel,
+.row-price,
+.row-why {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.row.is-match .row-time {
+  color: var(--signal);
+  font-weight: 500;
+}
+
+.row.is-match .row-why { color: var(--signal); }
+
+.row-main { min-width: 0; }
+
+.row-title,
+.row-venue {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-venue {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.row-price { text-align: right; }
+
+/* ---- location -------------------------------------------------------- */
+
+.rail-sub {
+  margin: 2px 0 8px 0;
+  font-size: 12px;
+  color: var(--ink-2);
+  max-width: 30ch;
+}
+
+.find {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px;
+  margin-bottom: 5px;
+}
+
+.find input {
+  min-width: 0;
+  padding: 4px 7px;
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.find input:focus-visible,
+.btn:focus-visible,
+.link:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+.btn {
+  padding: 4px 10px;
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn:hover { border-color: var(--ink); }
+
+.btn-wide { width: 100%; }
+
+.link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.link:hover { color: var(--ink); }
 
 /* ---- rail ------------------------------------------------------------ */
 
@@ -374,6 +614,21 @@ body {
   .chips { flex-wrap: nowrap; }
 
   .topbar { padding: 14px 16px 10px 16px; }
+
+  .toolbar { margin-left: 0; }
+
+  .list { margin-left: 0; }
+
+  .row, .list-head {
+    grid-template-columns: 66px minmax(0, 1fr) 72px;
+    row-gap: 2px;
+  }
+
+  .row-price, .row-why,
+  .list-head span:nth-child(4),
+  .list-head span:nth-child(5) { display: none; }
+
+  .tip { max-width: 70vw; }
 
   /* SVG text scales with the viewBox, so bump it back to a readable size. */
   .hour-label { font-size: 20px; }
