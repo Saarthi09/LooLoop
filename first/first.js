@@ -8,6 +8,8 @@ const universityButton = document.querySelector("#university-events");
 const apiBase = ["5500", "5501"].includes(window.location.port)
   ? "http://localhost:3000"
   : "";
+const joinedEventIds = new Set();
+
 function formatDate(event) {
   const value = event.dates?.start?.dateTime || event.dates?.start?.localDate;
   return value
@@ -18,6 +20,84 @@ function formatDate(event) {
       }).format(new Date(value))
     : "Date TBA";
 }
+
+function getSession() {
+  try {
+    return JSON.parse(localStorage.getItem("looloop-session") || "null");
+  } catch {
+    return null;
+  }
+}
+
+async function loadJoinedEventIds() {
+  const session = getSession();
+  if (!session?.accessToken) return;
+
+  try {
+    const response = await fetch(`${apiBase}/api/circles/mine`, {
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+    });
+    if (response.status === 401) {
+      localStorage.removeItem("looloop-session");
+      return;
+    }
+    if (!response.ok) return;
+
+    const payload = await response.json();
+    payload.circles.forEach((circle) => joinedEventIds.add(circle.event_id));
+  } catch {
+    // Event discovery should still work if saved circles cannot be loaded.
+  }
+}
+
+const joinedCirclesReady = loadJoinedEventIds();
+
+async function joinCircle(event, button, message) {
+  const session = getSession();
+  if (!session?.accessToken) {
+    window.location.href = "profile.html";
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = "Joining…";
+  message.textContent = "";
+
+  try {
+    const response = await fetch(`${apiBase}/api/circles/join`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.accessToken}`,
+      },
+      body: JSON.stringify({
+        eventId: event.id,
+        eventName: event.name,
+        eventUrl: event.url,
+        eventDate:
+          event.dates?.start?.dateTime || event.dates?.start?.localDate,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem("looloop-session");
+        window.location.href = "profile.html";
+        return;
+      }
+      throw new Error(payload.error || "Could not join this circle.");
+    }
+
+    joinedEventIds.add(String(event.id));
+    button.textContent = "Joined ✓";
+    message.innerHTML = '<a href="circles.html">View your circles →</a>';
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = "Join circle";
+    message.textContent = error.message;
+  }
+}
+
 function render(items) {
   results.replaceChildren();
   if (!items.length) {
@@ -51,7 +131,18 @@ function render(items) {
         reasons.append(listItem);
       });
     }
-    card.querySelector("a").href = event.url || "#";
+    card.querySelector(".event-actions a").href = event.url || "#";
+    const joinButton = card.querySelector(".join-circle-button");
+    const joinStatus = card.querySelector(".join-status");
+    if (joinedEventIds.has(String(event.id))) {
+      joinButton.disabled = true;
+      joinButton.textContent = "Joined ✓";
+      joinStatus.innerHTML = '<a href="circles.html">View your circles →</a>';
+    } else {
+      joinButton.addEventListener("click", () => {
+        joinCircle(event, joinButton, joinStatus);
+      });
+    }
     results.append(card);
   });
 }
@@ -72,6 +163,7 @@ async function loadRecommendations(preferences) {
       throw new Error(payload.error || "Could not build recommendations.");
     }
 
+    await joinedCirclesReady;
     render(payload.recommendations);
     title.textContent = "Your newcomer picks";
     status.textContent = `${payload.recommendations.length} personalized events`;
@@ -96,6 +188,7 @@ async function search() {
     const payload = await response.json();
     if (!response.ok)
       throw new Error(payload.error || "Could not find events.");
+    await joinedCirclesReady;
     render(payload.events);
     title.textContent = `Happening in ${data.get("city")}`;
     status.textContent = `${payload.events.length} upcoming events`;
@@ -118,6 +211,7 @@ async function showUniversityEvents() {
       throw new Error(payload.error || "Could not find university events.");
     }
 
+    await joinedCirclesReady;
     render(payload.events);
     title.textContent = "University of Waterloo events";
     status.textContent = `${payload.events.length} upcoming campus events`;

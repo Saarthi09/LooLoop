@@ -11,6 +11,7 @@
       <nav>
         <a href="/">Loo<span>Loop</span></a>
         <div class="nav-actions">
+          <a class="circles-link" href="profile.html">Profile</a>
           <a class="circles-link" href="/">Edit preferences</a>
           <a class="circles-link" href="circles.html">View circles →</a>
         </div>
@@ -76,7 +77,13 @@
           <p class="venue"></p>
           <p class="source"></p>
           <ul class="match-reasons"></ul>
-          <a target="_blank" rel="noreferrer">Details ↗</a>
+          <div class="event-actions">
+            <a target="_blank" rel="noreferrer">Details ↗</a>
+            <button class="join-circle-button" type="button">
+              Join circle
+            </button>
+          </div>
+          <p class="join-status" aria-live="polite"></p>
         </div>
       </article>
     </template>
