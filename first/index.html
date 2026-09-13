@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LooLoop</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main>
+      <nav>
+        <a href="/">Loo<span>Loop</span></a>
+        <p>Find your people, nearby.</p>
+      </nav>
+      <section class="hero">
+        <p class="eyebrow">YOUR NEXT LOOP STARTS HERE</p>
+        <h1>Make plans that<br /><em>feel like you.</em></h1>
+        <p>Discover concerts, workshops, games, and meetups around you.</p>
+        <form id="search-form">
+          <label
+            >What are you into?<input
+              id="keyword"
+              name="keyword"
+              placeholder="e.g. live music, pottery, soccer" /></label
+          ><label
+            >Where?<input
+              id="city"
+              name="city"
+              value="Toronto"
+              required /></label
+          ><button>Find events →</button>
+        </form>
+        <div class="quick">
+          Try: <button data-interest="comedy">Comedy</button
+          ><button data-interest="music">Live music</button
+          ><button data-interest="sports">Sports</button
+          ><button data-interest="arts">Arts</button>
+        </div>
+        <button id="university-events" class="university-button" type="button">
+          🎓 Explore University of Waterloo events
+        </button>
+      </section>
+      <section>
+        <div class="heading">
+          <div>
+            <p class="eyebrow">DISCOVER</p>
+            <h2 id="result-title">What’s happening nearby</h2>
+          </div>
+          <p id="status">Search to see upcoming events.</p>
+        </div>
+        <div id="results" class="grid">
+          <p class="empty">Choose an interest and city to start exploring.</p>
+        </div>
+      </section>
+    </main>
+    <template id="event-template"
+      ><article>
+        <img />
+        <div>
+          <p class="date"></p>
+          <h3></h3>
+          <p class="venue"></p>
+          <p class="source"></p>
+          <a target="_blank" rel="noreferrer">Details ↗</a>
+        </div>
+      </article></template
+    >
+    <script src="first.js"></script>
+  </body>
+</html>
