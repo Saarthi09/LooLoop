@@ -13,28 +13,43 @@
 <body>
   <header class="topbar">
     <h1 class="wordmark">Loo Loop</h1>
-    <p class="standfirst" id="standfirst">Checking what's on near Queen &amp; Spadina.</p>
+    <p class="standfirst" id="standfirst">Loading what's on around Waterloo.</p>
+    <button type="button" class="link topbar-link" id="edit-prefs" hidden>Change answers</button>
   </header>
 
-  <main class="frame">
-    <section class="stage">
-      <div class="toolbar">
-        <div class="switch" id="views" role="group" aria-label="View"></div>
-        <div class="switch" id="spans" role="group" aria-label="Hours shown"></div>
+  <main>
+    <section class="setup" id="setup" hidden>
+      <div class="setup-intro">
+        <h2 class="setup-h">Tonight, near you, in the time you actually have.</h2>
+        <p class="setup-p">Five questions. Nothing is saved and you can change any of it afterwards.</p>
       </div>
-
-      <div class="canvas-wrap" id="canvas-wrap">
-        <svg class="radial" id="radial" role="group" aria-label="Tonight, arranged by start time and travel time"></svg>
-        <div class="tip" id="tip" aria-hidden="true" hidden></div>
-      </div>
-
-      <div class="list" id="list" hidden></div>
-
-      <p class="empty" id="empty" hidden>Nothing fits that window. Try widening the time or the travel distance.</p>
-      <p class="legend" id="legend"></p>
+      <form class="setup-form" id="setup-form"></form>
     </section>
 
-    <aside class="rail" id="rail" aria-label="Filters"></aside>
+    <div class="results" id="results" hidden>
+      <div class="frame">
+        <section class="stage">
+          <div class="toolbar">
+            <div class="switch" id="views" role="group" aria-label="View"></div>
+            <div class="switch" id="spans" role="group" aria-label="Hours shown"></div>
+          </div>
+
+          <div class="pick" id="pick" hidden></div>
+
+          <div class="canvas-wrap" id="canvas-wrap">
+            <svg class="radial" id="radial" role="group" aria-label="What's on, arranged by start time and travel time"></svg>
+            <div class="tip" id="tip" aria-hidden="true" hidden></div>
+          </div>
+
+          <div class="list" id="list" hidden></div>
+
+          <p class="empty" id="empty" hidden>Nothing fits that window. Try widening the time, the travel distance, or what you'll spend.</p>
+          <p class="legend" id="legend"></p>
+        </section>
+
+        <aside class="rail" id="rail" aria-label="Filters"></aside>
+      </div>
+    </div>
   </main>
 
   <script type="module" src="js/app.js"></script>

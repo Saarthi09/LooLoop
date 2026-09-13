@@ -1,5 +1,8 @@
 *, *::before, *::after { box-sizing: border-box; }
 
+/* Class rules beat the UA's [hidden], and several blocks here set display. */
+[hidden] { display: none !important; }
+
 html { -webkit-text-size-adjust: 100%; }
 
 body {
@@ -166,6 +169,183 @@ body {
 }
 
 
+
+/* ---- setup screen ---------------------------------------------------- */
+
+.setup {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.7fr) minmax(0, 2fr);
+  gap: 40px;
+  align-items: start;
+  padding: 26px 28px 56px 28px;
+}
+
+.setup-h {
+  margin: 0 0 10px 0;
+  font-size: clamp(26px, 3.4vw, 40px);
+  font-weight: 500;
+  font-stretch: 118%;
+  letter-spacing: -0.02em;
+  line-height: 1.06;
+  max-width: 16ch;
+}
+
+.setup-p {
+  margin: 0;
+  color: var(--ink-2);
+  max-width: 34ch;
+}
+
+.setup-form {
+  display: grid;
+  gap: 20px;
+  max-width: 74ch;
+}
+
+.ask {
+  margin: 0;
+  padding: 0 0 18px 0;
+  border: 0;
+  border-bottom: 1px solid var(--hair);
+}
+
+.ask-go { border-bottom: 0; padding-bottom: 0; }
+
+.ask-q {
+  padding: 0;
+  margin: 0 0 2px 0;
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.ask-hint {
+  margin: 0 0 9px 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  max-width: 48ch;
+}
+
+.ask-origin {
+  margin: 0 0 8px 0;
+  font-weight: 500;
+}
+
+.ask-note {
+  margin: 8px 0 0 0;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.ask .find { max-width: 340px; }
+.ask .btn-wide { max-width: 340px; }
+
+.times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.time {
+  display: inline-grid;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.time input {
+  padding: 4px 7px;
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.time input:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+.btn-go {
+  padding: 8px 18px;
+  border-color: var(--signal);
+  background: var(--signal);
+  color: var(--paper);
+  font-size: 15px;
+}
+
+.btn-go:hover { border-color: var(--ink); }
+
+.topbar-link { margin-left: auto; }
+
+/* ---- the single recommendation --------------------------------------- */
+
+.pick {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) auto;
+  gap: 10px 26px;
+  align-items: start;
+  margin: 0 0 14px 26px;
+  padding: 13px 16px;
+  border: 1px solid var(--signal);
+  border-radius: var(--r-lg);
+}
+
+.pick-eyebrow {
+  margin: 0 0 1px 0;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.pick-title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 500;
+  font-stretch: 112%;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.pick-where {
+  margin: 1px 0 0 0;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.pick-why {
+  margin: 5px 0 0 0;
+  font-size: 13px;
+  max-width: 52ch;
+}
+
+.pick-facts {
+  display: flex;
+  gap: 20px;
+  margin: 0;
+}
+
+.pick-facts div { display: grid; gap: 1px; }
+
+.pick-facts dt {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.pick-facts dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.pick-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
 /* ---- toolbar --------------------------------------------------------- */
 
 .toolbar {
@@ -229,9 +409,6 @@ body {
   pointer-events: none;
 }
 
-/* A class rule beats the UA's [hidden], so restate it. */
-.tip[hidden] { display: none; }
-
 .tip-title { font-weight: 500; font-size: 14px; }
 
 .tip-venue {
@@ -264,7 +441,7 @@ body {
 
 .list-head {
   display: grid;
-  grid-template-columns: 76px minmax(0, 1fr) 96px 56px 86px;
+  grid-template-columns: 74px minmax(0, 1fr) 104px 84px 66px 76px;
   gap: 14px;
   padding: 0 2px 5px 2px;
   border-bottom: 1px solid var(--ink-3);
@@ -276,7 +453,7 @@ body {
 
 .row {
   display: grid;
-  grid-template-columns: 76px minmax(0, 1fr) 96px 56px 86px;
+  grid-template-columns: 74px minmax(0, 1fr) 104px 84px 66px 76px;
   gap: 14px;
   align-items: baseline;
   width: 100%;
@@ -304,6 +481,7 @@ body {
 .row-time,
 .row-travel,
 .row-price,
+.row-back,
 .row-why {
   font-variant-numeric: tabular-nums;
   color: var(--ink-2);
@@ -481,6 +659,7 @@ body {
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
+  white-space: nowrap;
   padding: 3px 8px;
   border: 1px solid var(--hair-2);
   border-radius: var(--r-sm);
@@ -611,9 +790,23 @@ body {
 
   .slider { grid-template-columns: 46px 140px; }
 
-  .chips { flex-wrap: nowrap; }
+  /* Only the rail turns into a horizontal strip; the setup form wraps. */
+  .rail .chips { flex-wrap: nowrap; }
 
   .topbar { padding: 14px 16px 10px 16px; }
+
+  .setup {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+    padding: 18px 16px 40px 16px;
+  }
+
+  .pick {
+    grid-template-columns: minmax(0, 1fr);
+    margin-left: 0;
+  }
+
+  .pick-facts { flex-wrap: wrap; gap: 14px; }
 
   .toolbar { margin-left: 0; }
 
@@ -624,9 +817,10 @@ body {
     row-gap: 2px;
   }
 
-  .row-price, .row-why,
+  .row-price, .row-back, .row-why,
   .list-head span:nth-child(4),
-  .list-head span:nth-child(5) { display: none; }
+  .list-head span:nth-child(5),
+  .list-head span:nth-child(6) { display: none; }
 
   .tip { max-width: 70vw; }
 
