@@ -1,5 +1,7 @@
 # LooLoop
 
+**▶ [Watch the demo](https://youtu.be/AFV2QNe3y-Q)** · Built at Pivot Hacks
+
 LooLoop helps new university students discover nearby events and meet people
 who want to attend the same things.
 
